@@ -1,0 +1,70 @@
+Tabla A: Silla de trabajo
+
+Tabla A1 Y A2
+considerar poner al inicio si tiene o no altura de la silla regulable. (considerar puntaje de +1 validarlo con el documento)
+
+si el pie no llega al piso se considera 3 (revisar y validad el codigo) 
+
+considerar distancia entre el asiento y la rodilla debe ser de 8 centimedros (si es mayor o menos puntaje de 2)
+
+se adiciona +1 punto si la profundidad de la silla no es regulable 
+
+
+TABLA A3: Reposabrazos
+
+Considerar según el documento que pasa si no tiene reposabrazos
+
+Si no tiene reposabrazos poner 2 y si no es ajustable se le pone 1(considerar si tiene o no reposabrazos y si es ajustable o no al inicio del programa usando la UI)
+
+reposa brazos si no tiene y si tuviera calular según el documento.
+
+si tuviera vordes afilados o duros colocar +1 y si son demasiado anchos +1 y si no son regulables +1 (Considerar ponerlo al inicio en la UI del programa)
+
+Tabla A4: puntuación de respaldo
+
+Postura neutra es entre >95 y <110 grados es 1. Con desviación si no tiene apoyo lumbar o apoyo inadecuado 2. Si su postura es >110 y <95 es 2. Si no esta utilizando el respaldo(esta separado del espaldar) colocar puntaje de 2. Si tuviera los hombros encogidos por tener la mesa muy alto o algo sumar +1. Si el respaldo no es regulable sumar +1. Considerar ponerlo en la UI para facilidad del programa.
+
+tABLAS b: Teléfono y pantalla
+
+Tabla B1: Puntuación del teléfono deja en puntuación de 1.
+
+Tabla B2: 1 punto si la pantalla esta entre 40-75 cm y a la altura de los ojos
+
+si la pantalla esta ubicada por debajo de los 30 grados desde el frente de los ojos colocar puntaje de 2
+
+si la pantalla genera extensión de cuello por esta elevada según la altura de los ojos poner 3 puntos.
+
+si es >75 cm de distancia la pantalla poner +1 punto
+
+si gira mucho el cuello para ver otra pantalla añadir +1
+
+si no hay portadocumentos colocar +1
+
+si la pantalla tiene reflejos colocar +1
+
+Tablas C: ratón y teclado
+
+
+Si el ratón esta alineado con el hombro colocar 1 punto
+
+Si el ratón no esta alineado con el hombro o fuera del alcance colocar 2 puntos
+
+Si el ratón es pequeño y la persona tiene que hacer agarre en pinza colocar +1
+
+Si el ratón y el teclado están a diferentes alturas colocar +2
+
+Si el reposamanos es duro o tiene puntos de presión sumar +1
+
+
+
+Tablas C-2: Puntuación del teclado
+
+Si tiene hombros relajados y muñeca recta colocar 1 punto
+
+Si tiene desviación extensión de muñeca > 15 GRADOS colocar 2 puntos
+
+si se desvía al escribir colocar +1 osea extensión de muñeca y hombros juntos
+
+si tiene teclado elevado y hombros encogidos colocar +1
+
+si su teclado no tiene soporte ajustable colocar +1

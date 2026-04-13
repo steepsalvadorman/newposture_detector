@@ -1,0 +1,46 @@
+7
+Notas Técnicas de Prevención
+rias y el cuello permanece recto, por lo que la puntuación 
+de la tabla B-1 es igual a 1. Respecto de la pantalla, la parte 
+superior está situada a la altura de los ojos y, a pesar de 
+que el trabajo requiere el uso de documentos en formato 
+físico, no se dispone de portadocumentos. El uso diario de 
+la pantalla es mayor de 4 horas al día. La puntuación de la 
+tabla B-2 es: 1 + 1 + 1 = 3. Con estos dos resultados inter-
+medios, se obtiene una puntuación de la tabla B igual a 2.
+Por lo que respecta al ratón, este se encuentra des -
+alineado en relación con el hombro y la muñeca que lo 
+manipula se apoya directamente sobre la mesa, de forma 
+que existe una presión de contacto a lo largo de las más de 
+4 horas de uso diario de este dispositivo. Atendiendo a los 
+criterios de la tabla C-1, la puntuación es: 2 + 1 + 1 = 4. Por 
+otra parte, al utilizar el teclado las muñecas permanecen 
+rectas y los hombros relajados, y el tiempo estimado de 
+uso se sitúa entre 1 y 4 horas, por lo que la puntuación de 
+la tabla C-2 es igual a 1. De esta forma, la puntuación de 
+la tabla C es igual a 4.
+La puntuación final de la pantalla y periféricos (tabla D) 
+se obtiene partiendo de las puntuaciones de la tabla B y 
+de la tabla C: 2 y 4 respectivamente. De este modo, el valor 
+correspondiente de la tabla D es igual a 4.
+Por último, la puntuación final ROSA se obtiene a través 
+de la tabla E empleando los valores 6 (tabla A más el tiem-
+po de uso diario) y 4 (tabla D). El resultado final obtenido es 
+igual a 6. Este valor es superior al valor de acción y, según 
+el criterio establecido por los autores del método, pone de 
+manifiesto la necesidad de realizar cambios inmediatos en 
+el puesto de trabajo.
+BIBLIOGRAFÍA
+Directiva 90/270/CEE del Consejo, de 29 de mayo de 1990, referente a las disposiciones mínimas de seguridad y de 
+salud relativas al trabajo con equipos que incluyen pantallas de visualización (quinta Directiva específica con arreglo al 
+apartado 1 del artículo 16 de la Directiva 89/391/CEE). Disponible aquí .
+A. Hedge, S. Morimoto, D. McCrobie. 1999. Effects of keyboard tray geometry on upper body posture and comfort.
+Ergonomics, 42 (10), 1333-1349. doi: 10.1080/001401399184983
+I. Kuorinka, B. Jonsson, A. Kilbom, H. Vinterberg, F. Biering-Sørensen, G. Andersson, K. Jørgensen. 1987. Stan -
+dardised Nordic questionnaires for the analysis of musculoskeletal symptoms. Applied Ergonomics, 18 (3), 233-237.
+doi:10.1016/0003-6870(87)90010-X
+M. Sonne, D. L. Villalta, D. M. Andrews. 2012. Development and evaluation of an office ergonomic risk checklist: ROSA -
+Rapid office strain assessment. Applied Ergonomics, 43 (1), 98-108. doi: 10.1016/j.apergo.2011.03.008
+Real Decreto 488/1997, de 14 de abril, sobre disposiciones mínimas de seguridad y salud relativas al trabajo con equipos 
+que incluyen pantallas de visualización. Disponible aquí .
+Reservados todos los derechos. Se autoriza su reproducción sin ánimo de lucro citando la fuente: INSST, nº NTP, año y título. NIPO: 118-20-027-6

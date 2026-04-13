@@ -1,0 +1,13 @@
+Alarm icons downloaded from OpenMoji (CC BY-SA 4.0).
+
+Keyboard:
+https://openmoji.org/library/emoji-2328/
+
+Computer mouse:
+https://openmoji.org/library/emoji-1F5B1/
+
+Chair:
+https://openmoji.org/library/emoji-1FA91/
+
+Downloaded PNG source pattern:
+https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@16.0.0/color/618x618/

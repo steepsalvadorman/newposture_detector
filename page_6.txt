@@ -1,0 +1,117 @@
+6
+Notas Técnicas de Prevención
+Tabla D: pantalla y periféricos
+La puntuación obtenida en la tabla B, junto con la de la 
+tabla C, constituyen los datos de entrada de la tabla D 
+para obtener la puntuación total relativa a la pantalla y 
+los periféricos.
+Tabla C (ratón y teclado)
+1 2 3 4 5 6 7 8 9
+Tabla B 
+(teléfono y 
+pantalla)
+1 1 2 3 4 5 6 7 8 9
+2 2 2 3 4 5 6 7 8 9
+3 3 3 3 4 5 6 7 8 9
+4 4 4 4 4 5 6 7 8 9
+5 5 5 5 5 5 6 7 8 9
+6 6 6 6 6 6 6 7 8 9
+7 7 7 7 7 7 7 7 8 9
+8 8 8 8 8 8 8 8 8 9
+9 9 9 9 9 9 9 9 9 9
+Tabla D. Puntuación de pantalla y periféricos.
+Tabla E: puntuación final
+La puntuación final del método ROSA se obtiene a través 
+de la tabla E partiendo de la puntación final de la silla 
+(tabla A con el ajuste adicional del tiempo de uso diario) 
+y la puntuación final de los periféricos (tabla D).
+Tabla D (pantalla y periféricos)
+1 2 3 4 5 6 7 8 9 10
+1 1 2 3 4 5 6 7 8 9 10
+2 2 2 3 4 5 6 7 8 9 10
+3 3 3 3 4 5 6 7 8 9 10
+4 4 4 4 4 5 6 7 8 9 10
+Tabla A 
+(silla) con 5 5 5 5 5 5 6 7 8 9 10
+factor 
+tiempo
+6 6 6 6 6 6 6 7 8 9 10
+7 7 7 7 7 7 7 7 8 9 10
+8 8 8 8 8 8 8 8 8 9 10
+9 9 9 9 9 9 9 9 9 9 10
+10 10 10 10 10 10 10 10 10 10 10
+Tabla E. Puntuación final del método ROSA. Las casillas som-
+breadas corresponden al nivel de acción que requiere actuación.
+Las casillas sombreadas de la tabla E corresponden 
+al nivel de acción, relativo a la necesidad de realizar 
+cambios en el puesto, y que debe interpretarse según el 
+criterio que se expone en el siguiente apartado. Por otra 
+parte, cabe destacar el carácter simétrico de esta tabla 
+a lo largo de una de sus diagonales. Esta característica 
+se refleja en el hecho de que cuando, bien la puntuación 
+final de la silla (tabla A más el factor de uso diario) o bien 
+la puntuación de la pantalla y periféricos (tabla D) sea 
+igual o superior a 5, entonces la puntuación final será 
+también superior a 5. Es decir, solo es posible obtener 
+puntuaciones finales inferiores a 5 cuando el resultado de 
+la tabla A (más el factor de uso) o el resultado de la tabla 
+D sean también inferiores a 5. De hecho, el resultado de 
+la tabla E es directamente el mayor de ambos valores, 
+de forma que matemáticamente es posible expresar la 
+puntuación final ROSA mediante:
+	𝑃𝑃𝑃𝑃𝑃𝑃𝑃𝑃𝑃𝑃𝑃𝑃𝑃𝑃𝑃𝑃ó𝑃𝑃	𝑅𝑅𝑅𝑅𝑅𝑅𝑅𝑅 = 𝑚𝑚á𝑥𝑥 𝑇𝑇𝑃𝑃𝑇𝑇𝑇𝑇𝑃𝑃	𝑅𝑅	 +𝑃𝑃𝑃𝑃𝑡𝑡𝑚𝑚𝑡𝑡𝑡𝑡	𝑑𝑑𝑡𝑡	𝑃𝑃𝑢𝑢𝑡𝑡 , 𝑇𝑇𝑃𝑃𝑇𝑇𝑇𝑇𝑃𝑃	𝐷𝐷
+3. INTERPRETACIÓN DEL NIVEL DE ACCIÓN
+Según los autores del método, la puntuación final obteni -
+da a partir de la tabla E presenta una correlación directa 
+con el nivel de «disconfort (malestar) musculoesqueléti -
+co» percibido por los trabajadores. Este malestar ha sido 
+obtenido mediante el cuestionario de la Universidad de 
+Cornell (Hedge et al. 1999) y es similar al cuestionario 
+nórdico de Kuorinka (1987), en el sentido de que dicho 
+cuestionario presenta al usuario un dibujo esquemático 
+del cuerpo humano para identificar y puntuar el malestar 
+en diferentes zonas corporales.
+De esta forma, el método ROSA establece que las pun-
+tuaciones finales iguales o mayores que 5 están asocia -
+das con un aumento significativo del malestar del traba -
+jador y podría indicar un mayor riesgo de sufrir lesiones.
+Por todo ello, los autores del método establecen el 
+valor igual a 5 o superior (casillas sombreadas en la ta -
+bla E) como nivel de acción, que indica la necesidad de 
+realizar cambios inmediatos en el puesto de trabajo. En 
+ningún caso el método sugiere que no exista riego alguno 
+cuando la puntuación es inferior a 5, sino que el riesgo 
+es menor. Este nivel de acción puede resultar útil en la 
+planificación de la actividad preventiva correspondiente, 
+de forma que debería priorizarse la intervención ergonó -
+mica (realización de análisis y estudios más detallados, 
+aplicación de medidas y realización de cambios en el 
+puesto de trabajo, etc.) en aquellos casos con una pun -
+tuación de 5 o superior.
+4. EJEMPLO DE APLICACIÓN
+Sea un puesto de trabajo de oficina en el que se utiliza 
+un equipo con pantalla de visualización para realizar ta -
+reas principalmente administrativas. Las características 
+de la silla utilizada en dicho puesto y las puntuaciones 
+correspondientes son:
+• Asiento alto (flexión de la rodilla > 90°) y altura de la
+silla no regulable.
+Puntuación tabla A-1: 2 + 1 = 3
+• Espacio de 7,5 cm entre el borde de la silla y la rodilla.
+Puntuación tabla A-2: 1
+• Los reposabrazos son altos de forma que los hombros
+están encogidos y no son regulables.
+Puntuación tabla A-3: 2 + 1 = 3
+• El respaldo no tiene un apoyo lumbar y su inclinación
+no es regulable.
+Puntuación tabla A-4: 2 + 1 = 3
+La puntuación parcial de la tabla A se obtiene teniendo
+en cuenta que la suma de las tablas A-1 y A-2 es igual a 
+4 y la suma de las tablas A-3 y A-4 es igual a 6. De esta 
+forma, el valor de la tabla A es igual a 5.
+El tiempo que el trabajador permanece sentado en la 
+silla a lo largo de su jornada laboral es mayor de 4 horas 
+diarias, por lo que es necesario sumar un punto adicional 
+a la puntuación anterior, de forma que la puntuación total 
+debida a la silla es: 5 + 1 = 6.
+El uso que se hace del teléfono es entre 1 y 4 horas dia-
