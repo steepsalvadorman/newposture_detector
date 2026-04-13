@@ -7,7 +7,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from recomendaciones import cfg_efectiva, recomendaciones_alerta
+from recomendaciones import cfg_efectiva, recomendaciones_alerta, resumen_analisis
 
 try:
     WINSOUND_OK = True
@@ -79,8 +79,6 @@ UI_LABELS = {
     "apoyo_lumbar_adecuado": "Apoyo lumbar adecuado",
     "hombros_encogidos_silla": "Hombros encogidos por mesa o silla",
     "respaldo_no_regulable": "Respaldo no regulable",
-    "telefono_alejado": "Telefono alejado mas de 30 cm",
-    "sujecion_hombro_cuello": "Sujeta el telefono con hombro o cuello",
     "pantalla_dist_ok": "Pantalla entre 40 y 75 cm y a la altura de los ojos",
     "pantalla_baja": "Pantalla baja",
     "pantalla_elevada": "Pantalla elevada y obliga a extender el cuello",
@@ -323,15 +321,7 @@ def _actualizar_informe_proyecto(wb, registro, metadata, cfg_base=None):
     row += 1
     _cell(ws, row, 1, "Resultados analizados", bold=True, fill=_hdr_fill(), color="FFFFFF", align="center")
     _cell(ws, row + 1, 1, "Resumen")
-    _cell(
-        ws,
-        row + 1,
-        2,
-        (
-            f"Silla={registro.get('total_silla', '')}, Pantalla/telefono={registro.get('tabla_B', '')}, "
-            f"Mouse/teclado={registro.get('tabla_C', '')}, Combinado={registro.get('tabla_D', '')}."
-        ),
-    )
+    _cell(ws, row + 1, 2, resumen_analisis(registro, cfg_efectiva(cfg_base or {}, registro.get("flags_inferidos"))))
     row += 3
     cfg_eval = cfg_efectiva(cfg_base or {}, registro.get("flags_inferidos"))
     recomendaciones = recomendaciones_alerta(registro, cfg_eval)

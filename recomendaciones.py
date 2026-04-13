@@ -6,6 +6,39 @@ def cfg_efectiva(cfg_base, flags_inferidos):
     return cfg
 
 
+def _codo_fuera_de_90(dato):
+    ang_codo = dato.get("ang_codo")
+    if ang_codo is None:
+        return False
+    try:
+        ang_codo = float(ang_codo)
+    except (TypeError, ValueError):
+        return False
+    return not (80.0 <= ang_codo <= 100.0)
+
+
+def resumen_analisis(registro, cfg):
+    partes = [
+        (
+            f"Silla={registro.get('total_silla', '')}, Pantalla/telefono={registro.get('tabla_B', '')}, "
+            f"Mouse/teclado={registro.get('tabla_C', '')}, Combinado={registro.get('tabla_D', '')}."
+        )
+    ]
+
+    if _codo_fuera_de_90(registro):
+        partes.append(
+            f"El codo está fuera del rango neutro de 80° a 100° ({float(registro.get('ang_codo')):.1f}°)."
+        )
+    if cfg.get("hombros_encogidos_silla"):
+        partes.append("Se detectan hombros elevados o forzados por la relación silla/mesa.")
+    elif registro.get("A3", 0) >= 2:
+        partes.append("La corrección debe centrarse en apoyar mejor los antebrazos, no en relajar hombros si ya están neutros.")
+    if abs(registro.get("ang_muneca", 0) or 0) > 15:
+        partes.append("La muñeca se desvía al escribir y también aporta al riesgo.")
+
+    return " ".join(partes)
+
+
 def recomendaciones_alerta(dato, cfg):
     items = []
 
@@ -34,8 +67,12 @@ def recomendaciones_alerta(dato, cfg):
             acciones.append("apoya la espalda en el respaldo")
         if not cfg.get("apoyo_lumbar_adecuado", True):
             acciones.append("corrige o agrega apoyo lumbar")
-        if cfg.get("hombros_encogidos_silla"):
+        if cfg.get("hombros_encogidos_silla") and _codo_fuera_de_90(dato):
+            acciones.append("reajusta silla o mesa para relajar hombros y recuperar codos cerca de 90°")
+        elif cfg.get("hombros_encogidos_silla"):
             acciones.append("baja o reajusta silla/mesa para relajar los hombros")
+        elif _codo_fuera_de_90(dato):
+            acciones.append("reajusta silla o reposabrazos hasta dejar los codos cerca de 90°")
         if not acciones:
             acciones.append("regula silla, asiento y respaldo hasta recuperar una postura neutra")
         add_item(dato.get("total_silla", 0), "Silla", acciones, "silla")
@@ -96,7 +133,11 @@ def recomendaciones_alerta(dato, cfg):
         acciones = []
         if not cfg.get("tiene_reposabrazos", True):
             acciones.append("incorpora reposabrazos")
-        if cfg.get("reposabrazos_altos_bajos"):
+        if cfg.get("reposabrazos_altos_bajos") and _codo_fuera_de_90(dato):
+            acciones.append(
+                f"ajusta reposabrazos para acercar el codo a 90°; ahora está en {float(dato.get('ang_codo')):.1f}°"
+            )
+        elif cfg.get("reposabrazos_altos_bajos"):
             acciones.append("ajusta reposabrazos para mantener codos cerca de 90°")
         if cfg.get("reposabrazos_no_regulables") or not cfg.get("reposabrazos_ajustable", True):
             acciones.append("usa reposabrazos regulables")

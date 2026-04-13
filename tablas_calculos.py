@@ -391,7 +391,6 @@ def calcular_ROSA_completo_v5(
         teclado_elevado_hombros, sin_soporte_teclado,
 ):
     ft_silla = factor_tiempo_F(horas_silla)
-    ft_telefono = factor_tiempo_F(horas_telefono)
     ft_pantalla = factor_tiempo_F(horas_pantalla)
     ft_raton = factor_tiempo_F(horas_raton)
     ft_teclado = factor_tiempo_F(horas_teclado)
@@ -409,8 +408,8 @@ def calcular_ROSA_completo_v5(
     tabla_A_val  = _tlu(_TABLA_A, suma_asiento - 2, suma_soporte - 2)
     total_silla  = int(np.clip(tabla_A_val + ft_silla, 1, 10))
 
-    b1 = puntuar_B1(telefono_alejado, sujecion_hombro_cuello,
-                    sin_manos_libres, ft_telefono)
+    # B1 queda fijo en 1. Ya no se configura desde la UI.
+    b1 = 1
     b2 = puntuar_B2_pantalla(desv_cuello, pantalla_dist_ok, pantalla_baja, pantalla_elevada,
                               dist_pantalla_mayor_75, giro_otra_pantalla,
                               sin_portadocumentos, pantalla_reflejos, ft_pantalla)
@@ -436,7 +435,7 @@ def calcular_ROSA_completo_v5(
         "suma_asiento": suma_asiento, "suma_soporte": suma_soporte,
         "tabla_A": tabla_A_val,
         "factor_tiempo_silla": ft_silla,
-        "factor_tiempo_telefono": ft_telefono,
+        "factor_tiempo_telefono": 0,
         "factor_tiempo_pantalla": ft_pantalla,
         "factor_tiempo_raton": ft_raton,
         "factor_tiempo_teclado": ft_teclado,

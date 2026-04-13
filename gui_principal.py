@@ -1,5 +1,7 @@
+import copy
 import os
 import queue
+import sys
 import threading
 import time
 import tkinter as tk
@@ -14,6 +16,9 @@ from tablas_calculos import C, GUARDADO_SEG, INTERVALO_EVAL_SEG, NIVEL_ACCION, N
 
 if WINSOUND_OK:
     import winsound
+
+
+RETARDO_ALARMA_SEG = 10
 
 
 def nivel_accion(score):
@@ -73,14 +78,7 @@ def motivo_a4(dato, cfg):
 
 
 def motivo_b1(dato, cfg):
-    motivos = []
-    if cfg["telefono_alejado"]:
-        motivos.append("teléfono alejado")
-    if cfg["sujecion_hombro_cuello"]:
-        motivos.append("sujeción con hombro/cuello")
-    if cfg["sin_manos_libres"]:
-        motivos.append("sin manos libres")
-    return ", ".join(motivos) if motivos else "uso de teléfono neutro"
+    return "B1 fijo en 1 por configuración automática"
 
 
 def motivo_b2(dato, cfg):
@@ -159,17 +157,22 @@ def _crear_icono_categoria(categoria, size=60):
     return ImageTk.PhotoImage(img)
 
 
+def _ruta_recurso(*partes):
+    base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_dir, *partes)
+
+
 def _cargar_icono_categoria(categoria, size=60):
     categoria = (categoria or "").strip().lower()
     rutas = {
-        "silla": os.path.join("assets", "alert_icons", "silla.png"),
-        "mouse": os.path.join("assets", "alert_icons", "mouse.png"),
-        "teclado": os.path.join("assets", "alert_icons", "teclado.png"),
-        "pantalla": os.path.join("assets", "alert_icons", "pantalla.png"),
-        "telefono": os.path.join("assets", "alert_icons", "telefono.png"),
-        "reposabrazos": os.path.join("assets", "alert_icons", "reposabrazos.png"),
-        "ajustes de asiento y respaldo": os.path.join("assets", "alert_icons", "ajustes_asiento_respaldo.png"),
-        "general": os.path.join("assets", "alert_icons", "general.png"),
+        "silla": _ruta_recurso("assets", "alert_icons", "silla.png"),
+        "mouse": _ruta_recurso("assets", "alert_icons", "mouse.png"),
+        "teclado": _ruta_recurso("assets", "alert_icons", "teclado.png"),
+        "pantalla": _ruta_recurso("assets", "alert_icons", "pantalla.png"),
+        "telefono": _ruta_recurso("assets", "alert_icons", "telefono.png"),
+        "reposabrazos": _ruta_recurso("assets", "alert_icons", "reposabrazos.png"),
+        "ajustes de asiento y respaldo": _ruta_recurso("assets", "alert_icons", "ajustes_asiento_respaldo.png"),
+        "general": _ruta_recurso("assets", "alert_icons", "general.png"),
     }
     ruta = rutas.get(categoria)
     if ruta and os.path.exists(ruta):
@@ -382,7 +385,15 @@ class PanelROSA(tk.Tk):
         self._alerta_activa = False
         self._ultimo_alerta = 0.0
         self._after_update_id = None
+        self._after_alarma_id = None
         self._cerrando = False
+        self._guardado_lock = threading.Lock()
+        self._guardado_en_progreso = False
+        self._guardado_pendiente = None
+        self.cola_estado_guardado = queue.Queue()
+        self._alarma_pendiente = False
+        self._alarma_deadline = 0.0
+        self._ultimo_dato = None
 
         self.metadata = {
             "nombre_proyecto": self.cfg.get("nombre_proyecto", "Evaluacion ergonomica ROSA"),
@@ -440,6 +451,14 @@ class PanelROSA(tk.Tk):
             fg=C["ok"],
         )
         self.lbl_xlsx_status.pack(side="right", padx=8, pady=6)
+        self.lbl_alerta_status = tk.Label(
+            info_bar,
+            text="",
+            font=("Consolas", 9, "bold"),
+            bg=C["bg_panel"],
+            fg=C["warn"],
+        )
+        self.lbl_alerta_status.pack(side="right", padx=(0, 8), pady=6)
 
         right = tk.Frame(self, bg=C["bg_deep"], width=420)
         right.pack(side="right", fill="y", padx=(8, 16), pady=16)
@@ -604,36 +623,113 @@ class PanelROSA(tk.Tk):
         )
 
     def _update_loop(self):
+        while True:
+            try:
+                estado_guardado = self.cola_estado_guardado.get_nowait()
+            except queue.Empty:
+                break
+
+            if estado_guardado["ok"]:
+                self._ultimo_guardado = estado_guardado["ts"]
+                self.lbl_xlsx_status.config(
+                    text=f"Guardado {time.strftime('%H:%M:%S', time.localtime(estado_guardado['ts']))}",
+                    fg=C["ok"],
+                )
+            else:
+                self.lbl_xlsx_status.config(text=f"Error: {estado_guardado['error']}", fg=C["danger"])
+
+        frame_rgb = None
         try:
-            frame_rgb = self.cola_frames.get_nowait()
+            while True:
+                frame_rgb = self.cola_frames.get_nowait()
+        except queue.Empty:
+            pass
+        if frame_rgb is not None:
             self._actualizar_frame(frame_rgb)
+
+        try:
+            while True:
+                self.cola_angulos.get_nowait()
         except queue.Empty:
             pass
 
+        dato = None
         try:
-            self.cola_angulos.get_nowait()
+            while True:
+                dato = self.cola_datos.get_nowait()
         except queue.Empty:
             pass
-
-        try:
-            dato = self.cola_datos.get_nowait()
+        if dato is not None:
             if "error" in dato:
                 messagebox.showerror("Error", dato["error"])
                 self.destroy()
                 return
+            self._ultimo_dato = dato
             self.registros.append(dato)
             self.num_registro += 1
             self._actualizar_resultado(dato)
             if dato["rosa"] >= NIVEL_ACCION:
-                self._alertar()
-        except queue.Empty:
-            pass
+                self._programar_alarma()
+            else:
+                self._cancelar_alarma_pendiente()
+
+        if self._alarma_pendiente:
+            restante = max(0, int(self._alarma_deadline - time.time() + 0.999))
+            self.lbl_alerta_status.config(text=f"Alarma en {restante}s")
+        elif not self._alerta_activa:
+            self.lbl_alerta_status.config(text="")
 
         if self.registros and time.time() - self._ultimo_guardado >= GUARDADO_SEG:
-            self._guardar_nuevo_registro()
+            self._programar_guardado_async()
 
         if not self._cerrando:
             self._after_update_id = self.after(30, self._update_loop)
+
+    def _programar_guardado_async(self):
+        if not self.registros or self._cerrando:
+            return
+
+        payload = (
+            copy.deepcopy(self.registros[-1]),
+            self.num_registro,
+        )
+
+        with self._guardado_lock:
+            self._guardado_pendiente = payload
+            if self._guardado_en_progreso:
+                return
+            self._guardado_en_progreso = True
+            payload = self._guardado_pendiente
+            self._guardado_pendiente = None
+
+        threading.Thread(
+            target=self._guardar_worker,
+            args=(payload,),
+            daemon=True,
+        ).start()
+
+    def _guardar_worker(self, payload_inicial):
+        payload = payload_inicial
+        while payload is not None:
+            registro, num_registro = payload
+            try:
+                agregar_registro_excel(
+                    self.ruta_xlsx,
+                    registro,
+                    num_registro,
+                    metadata=self.metadata,
+                    cfg_base=self.cfg,
+                )
+                self.cola_estado_guardado.put({"ok": True, "ts": time.time()})
+            except Exception as exc:
+                self.cola_estado_guardado.put({"ok": False, "error": str(exc)})
+
+            with self._guardado_lock:
+                payload = self._guardado_pendiente
+                self._guardado_pendiente = None
+                if payload is None:
+                    self._guardado_en_progreso = False
+                    break
 
     def _guardar_nuevo_registro(self):
         if not self.registros:
@@ -671,7 +767,37 @@ class PanelROSA(tk.Tk):
         except Exception as exc:
             messagebox.showerror("Error", str(exc))
 
-    def _alertar(self):
+    def _cancelar_alarma_pendiente(self):
+        self._alarma_pendiente = False
+        self._alarma_deadline = 0.0
+        self.lbl_alerta_status.config(text="")
+        if self._after_alarma_id is not None:
+            try:
+                self.after_cancel(self._after_alarma_id)
+            except Exception:
+                pass
+            self._after_alarma_id = None
+
+    def _programar_alarma(self):
+        ahora = time.time()
+        if self._alerta_activa or self._alarma_pendiente or (ahora - self._ultimo_alerta) < 3:
+            return
+        self._alarma_pendiente = True
+        self._alarma_deadline = ahora + RETARDO_ALARMA_SEG
+        self.lbl_alerta_status.config(text=f"Alarma en {RETARDO_ALARMA_SEG}s")
+        self._after_alarma_id = self.after(RETARDO_ALARMA_SEG * 1000, self._mostrar_alarma_diferida)
+
+    def _mostrar_alarma_diferida(self):
+        self._after_alarma_id = None
+        self._alarma_pendiente = False
+        self._alarma_deadline = 0.0
+        self.lbl_alerta_status.config(text="")
+        ultimo = self._ultimo_dato or (self.registros[-1] if self.registros else {})
+        if not ultimo or ultimo.get("rosa", 0) < NIVEL_ACCION or self._cerrando:
+            return
+        self._alertar(ultimo)
+
+    def _alertar(self, dato=None):
         ahora = time.time()
         if self._alerta_activa or (ahora - self._ultimo_alerta) < 3:
             return
@@ -684,7 +810,8 @@ class PanelROSA(tk.Tk):
                 return
             self._alerta_activa = False
             self._alerta_overlay = None
-        ultima = self.registros[-1] if self.registros else {}
+            self.lbl_alerta_status.config(text="")
+        ultima = dato or self._ultimo_dato or (self.registros[-1] if self.registros else {})
         recomendaciones = recomendaciones_alerta(ultima, cfg_efectiva(self.cfg, ultima.get("flags_inferidos")))
         self._alerta_overlay = mostrar_overlay_alarma(self, recomendaciones, on_close=cerrar_alerta)
 
@@ -699,6 +826,8 @@ class PanelROSA(tk.Tk):
             except Exception:
                 pass
             self._after_update_id = None
+
+        self._cancelar_alarma_pendiente()
 
         if self._alerta_overlay is not None:
             try:

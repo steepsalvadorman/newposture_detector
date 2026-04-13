@@ -14,9 +14,19 @@ def detectar_camaras():
     camaras = []
     for i in range(MAX_CAMARAS_SCAN):
         cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-        if cap.isOpened():
-            camaras.append((i, f"Camara {i}"))
-            cap.release()
+        try:
+            prop = getattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC", None)
+            if prop is not None:
+                cap.set(prop, 700)
+            if cap.isOpened():
+                ok, _ = cap.read()
+                if ok:
+                    camaras.append((i, f"Camara {i}"))
+        finally:
+            try:
+                cap.release()
+            except Exception:
+                pass
     return camaras if camaras else [(0, "Default")]
 
 
@@ -142,12 +152,6 @@ class DialogoInicio(tk.Tk):
         )
 
         self._seccion(body, "Consideraciones de la evaluacion ergonomica: Pantalla")
-        self._check(body, "Telefono alejado mas de 30 cm", self._bv("telefono_alejado"))
-        self._check(
-            body,
-            "Sujeta el telefono con hombro o cuello",
-            self._bv("sujecion_hombro_cuello"),
-        )
         self._check(
             body,
             "Pantalla entre 40 y 75 cm y a la altura de los ojos",
@@ -357,7 +361,7 @@ class DialogoInicio(tk.Tk):
         self.spin_dist.pack(anchor="w", padx=12, pady=(2, 6))
         tk.Label(
             parent,
-            text="Valor recomendado: 5-9 cm",
+            text="Postura neutra: exactamente 8 cm",
             font=("Consolas", 8),
             bg=C["bg_card"],
             fg=C["text_lo"],
@@ -418,11 +422,9 @@ class DialogoInicio(tk.Tk):
             elif isinstance(v, tk.DoubleVar):
                 cfg[k] = float(v.get())
         cfg["horas_silla"] = horas
-        cfg["horas_telefono"] = horas
         cfg["horas_pantalla"] = horas
         cfg["horas_raton"] = horas
         cfg["horas_teclado"] = horas
-        cfg["sin_manos_libres"] = False
         cfg["nombre_proyecto"] = proyecto
         cfg["evaluador"] = evaluador
         cfg["empresa"] = empresa

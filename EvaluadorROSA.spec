@@ -5,6 +5,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 datas = collect_data_files('mediapipe.tasks.c')
 datas += [('efficientdet_lite0.tflite', '.')]
+datas += [('assets', 'assets')]
 
 hiddenimports = collect_submodules('mediapipe.tasks')
 hiddenimports += ['mediapipe.tasks.c']

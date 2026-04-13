@@ -43,6 +43,48 @@ _POSE_LM = {
 }
 
 
+def _set_cap_prop_if_available(cap, prop_name, value):
+    prop = getattr(cv2, prop_name, None)
+    if prop is None:
+        return
+    try:
+        cap.set(prop, value)
+    except Exception:
+        pass
+
+
+class _LectorFramesCamara(threading.Thread):
+    def __init__(self, cap):
+        super().__init__(daemon=True)
+        self._cap = cap
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
+        self._latest_frame = None
+        self._latest_ok = False
+        self._latest_ts = 0.0
+
+    def stop(self):
+        self._stop_event.set()
+
+    def get_latest(self):
+        with self._lock:
+            frame = None if self._latest_frame is None else self._latest_frame.copy()
+            return self._latest_ok, frame, self._latest_ts
+
+    def run(self):
+        while not self._stop_event.is_set():
+            try:
+                ret, frame = self._cap.read()
+            except Exception:
+                ret, frame = False, None
+            with self._lock:
+                self._latest_ok = bool(ret and frame is not None)
+                self._latest_frame = frame if self._latest_ok else None
+                self._latest_ts = time.time()
+            if not self._latest_ok and self._stop_event.wait(0.03):
+                break
+
+
 def _dibujar_pose_y_overlay(frame, lms, angulos):
     h, w, _ = frame.shape
     conexiones = [
@@ -208,6 +250,116 @@ def _lado_perfil(lms, w, h):
     return {"nombre": nombre, "ear": ear, "shoulder": shoulder}
 
 
+def _punto_caja_mas_cercano(pt, bbox):
+    x1, y1, x2, y2 = bbox
+    return np.array([
+        min(max(float(pt[0]), float(x1)), float(x2)),
+        min(max(float(pt[1]), float(y1)), float(y2)),
+    ], dtype=float)
+
+
+def _centro_bbox(bbox):
+    x1, y1, x2, y2 = bbox
+    return np.array([(x1 + x2) / 2.0, (y1 + y2) / 2.0], dtype=float)
+
+
+def _lado_visible_brazo(lms, w, h):
+    candidatos = []
+    for nombre, shoulder_idx, elbow_idx, wrist_idx in (
+        ("izquierdo", _POSE_LM["LEFT_SHOULDER"], _POSE_LM["LEFT_ELBOW"], _POSE_LM["LEFT_WRIST"]),
+        ("derecho", _POSE_LM["RIGHT_SHOULDER"], _POSE_LM["RIGHT_ELBOW"], _POSE_LM["RIGHT_WRIST"]),
+    ):
+        shoulder = _pt(lms, shoulder_idx, w, h)
+        elbow = _pt(lms, elbow_idx, w, h)
+        wrist = _pt(lms, wrist_idx, w, h)
+        if shoulder is None or elbow is None or wrist is None:
+            continue
+        score = float(np.mean([
+            _landmark_score(lms, shoulder_idx),
+            _landmark_score(lms, elbow_idx),
+            _landmark_score(lms, wrist_idx),
+        ]))
+        candidatos.append((score, nombre, shoulder, elbow, wrist))
+
+    if not candidatos:
+        return None
+
+    _, nombre, shoulder, elbow, wrist = max(candidatos, key=lambda item: item[0])
+    return {
+        "nombre": nombre,
+        "shoulder": shoulder,
+        "elbow": elbow,
+        "wrist": wrist,
+    }
+
+
+def _inferir_mouse_desde_pose_objetos(lms, w, h, detecciones):
+    resultado = {
+        "mano_sobre_mouse": False,
+        "raton_alineado_inferido": None,
+        "lado_mouse": None,
+    }
+
+    if lms is None or not detecciones:
+        return resultado
+
+    bbox_mouse = None
+    det_mouse = [d for d in detecciones if "mouse" in d.get("logical", ())]
+    if det_mouse:
+        bbox_mouse = max(det_mouse, key=lambda d: float(d.get("score", 0.0))).get("bbox")
+    if bbox_mouse is None:
+        return resultado
+
+    lsh = _pt(lms, _POSE_LM["LEFT_SHOULDER"], w, h)
+    rsh = _pt(lms, _POSE_LM["RIGHT_SHOULDER"], w, h)
+    lhi = _pt(lms, _POSE_LM["LEFT_HIP"], w, h)
+    rhi = _pt(lms, _POSE_LM["RIGHT_HIP"], w, h)
+    sh_mid = _avg_pt(lsh, rsh)
+    hip_mid = _avg_pt(lhi, rhi)
+
+    lado = None
+    if _es_postura_perfil(lsh, rsh, sh_mid, hip_mid, w):
+        lado_perfil = _lado_perfil(lms, w, h)
+        if lado_perfil is not None:
+            idx = "LEFT" if lado_perfil["nombre"] == "izquierdo" else "RIGHT"
+            lado = {
+                "nombre": lado_perfil["nombre"],
+                "shoulder": _pt(lms, _POSE_LM[f"{idx}_SHOULDER"], w, h),
+                "elbow": _pt(lms, _POSE_LM[f"{idx}_ELBOW"], w, h),
+                "wrist": _pt(lms, _POSE_LM[f"{idx}_WRIST"], w, h),
+            }
+    if lado is None:
+        lado = _lado_visible_brazo(lms, w, h)
+    if lado is None:
+        return resultado
+
+    shoulder = lado["shoulder"]
+    elbow = lado["elbow"]
+    wrist = lado["wrist"]
+    if shoulder is None or elbow is None or wrist is None:
+        return resultado
+
+    mouse_center = _centro_bbox(bbox_mouse)
+    mouse_contact = _punto_caja_mas_cercano(wrist, bbox_mouse)
+    dist_wrist_mouse = float(np.linalg.norm(wrist - mouse_contact))
+    brazo_ref = max(float(np.linalg.norm(shoulder - wrist)), 1.0)
+    torso_ref = max(float(np.linalg.norm(hip_mid - sh_mid)), 1.0) if hip_mid is not None and sh_mid is not None else float(h)
+    tolerancia_contacto = max(0.18 * brazo_ref, 0.05 * torso_ref, 0.035 * w)
+    mano_sobre_mouse = dist_wrist_mouse <= tolerancia_contacto
+
+    resultado["mano_sobre_mouse"] = mano_sobre_mouse
+    resultado["lado_mouse"] = lado["nombre"]
+
+    if not mano_sobre_mouse:
+        return resultado
+
+    alcance_ok = float(np.linalg.norm(mouse_center - shoulder)) <= max(1.1 * brazo_ref, 0.22 * w)
+    altura_ok = abs(float(mouse_center[1] - wrist[1])) <= max(0.10 * torso_ref, 0.05 * h)
+    codo_del_mismo_lado = float(np.linalg.norm(wrist - elbow)) <= max(0.65 * brazo_ref, 0.16 * w)
+    resultado["raton_alineado_inferido"] = bool(alcance_ok and altura_ok and codo_del_mismo_lado)
+    return resultado
+
+
 def _inferir_flags_ergonomicos(lms, w, h, detecciones, angulos):
     inferidas = {
         "pantalla_baja": False,
@@ -241,7 +393,17 @@ def _inferir_flags_ergonomicos(lms, w, h, detecciones, angulos):
 
     if nose is not None and sh_mid is not None:
         distancia_cabeza_hombros = sh_mid[1] - nose[1]
-        if distancia_cabeza_hombros < (0.16 * h):
+        torso_ref = None
+        if hip_mid is not None:
+            torso_ref = hip_mid[1] - sh_mid[1]
+        # La distancia cabeza-hombros depende mucho del zoom de la cámara.
+        # Se normaliza con el torso para evitar falsos positivos cuando la
+        # persona está cerca de la cámara pero con hombros relajados.
+        if torso_ref is not None and torso_ref > 1.0:
+            if distancia_cabeza_hombros < (0.45 * torso_ref):
+                inferidas["hombros_encogidos_silla"] = True
+                motivos.append("hombros encogidos")
+        elif distancia_cabeza_hombros < (0.12 * h):
             inferidas["hombros_encogidos_silla"] = True
             motivos.append("hombros encogidos")
 
@@ -331,12 +493,17 @@ class HiloCamara(threading.Thread):
         self._buf_objetos = {"pantalla": 0, "teclado": 0, "mouse": 0, "muestras": 0}
         self._stop_event = threading.Event()
         self._cap = None
+        self._lector_frames = None
         self._landmarker = None
         self._object_detector = None
 
     def stop(self):
         self.activo = False
         self._stop_event.set()
+
+        lector = self._lector_frames
+        if lector is not None:
+            lector.stop()
 
         cap = self._cap
         if cap is not None:
@@ -422,28 +589,46 @@ class HiloCamara(threading.Thread):
                 print(f"[hilo] object detector error: {e}")
 
         cap = cv2.VideoCapture(self.cam_idx, cv2.CAP_DSHOW)
+        _set_cap_prop_if_available(cap, "CAP_PROP_OPEN_TIMEOUT_MSEC", 1200)
+        _set_cap_prop_if_available(cap, "CAP_PROP_READ_TIMEOUT_MSEC", 1200)
         if not cap.isOpened():
+            try:
+                cap.release()
+            except Exception:
+                pass
             cap = cv2.VideoCapture(self.cam_idx)
+            _set_cap_prop_if_available(cap, "CAP_PROP_OPEN_TIMEOUT_MSEC", 1200)
+            _set_cap_prop_if_available(cap, "CAP_PROP_READ_TIMEOUT_MSEC", 1200)
         if not cap.isOpened():
             self.cola_datos.put({"error": "No se pudo acceder a la cámara."})
             return
         self._cap = cap
+        lector_frames = _LectorFramesCamara(cap)
+        self._lector_frames = lector_frames
+        lector_frames.start()
 
         try:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            _set_cap_prop_if_available(cap, "CAP_PROP_BUFFERSIZE", 1)
 
             last_eval = time.time()
             last_detect = 0.0
             last_object_detect = 0.0
             ts_ms = 0
+            ultimo_frame_ok = time.time()
 
             while self.activo and not self._stop_event.is_set():
-                ret, frame = cap.read()
+                ret, frame, frame_ts = lector_frames.get_latest()
                 if not ret or frame is None:
+                    ahora = time.time()
+                    if (ahora - frame_ts) > 2.0 and (ahora - ultimo_frame_ok) > 2.0:
+                        self.cola_datos.put({"error": "La cámara dejó de entregar frames."})
+                        break
                     if self._stop_event.wait(0.03):
                         break
                     continue
+                ultimo_frame_ok = time.time()
 
                 frame = cv2.flip(frame, 1)
                 h, w, _ = frame.shape
@@ -535,75 +720,90 @@ class HiloCamara(threading.Thread):
                     buf = self._buf
                     if all(len(v) > 0 for v in buf.values()):
                         cfg = self.cfg
-                        inferidas, motivos_inferidos = _inferir_flags_ergonomicos(
-                            lms,
-                            w,
-                            h,
-                            self._ultimas_detecciones_obj,
-                            (
-                                float(np.median(buf["tronco"])),
-                                float(np.median(buf["rodilla"])),
-                                float(np.median(buf["codo"])),
-                                float(np.median(buf["cuello"])),
-                                float(np.median(buf["muneca"])),
-                            ),
-                        )
-                        pantalla_elevada = cfg["pantalla_elevada"] or inferidas["pantalla_elevada"]
-                        pantalla_baja = cfg["pantalla_baja"] or inferidas["pantalla_baja"]
-                        pantalla_dist_ok = (
-                            (cfg["pantalla_dist_ok"] or inferidas["pantalla_dist_ok"])
-                            and not pantalla_elevada
-                            and not pantalla_baja
-                        )
-                        hombros_encogidos_silla = cfg["hombros_encogidos_silla"] or inferidas["hombros_encogidos_silla"]
-                        reposabrazos_altos_bajos = cfg["reposabrazos_altos_bajos"] or inferidas["reposabrazos_altos_bajos"]
-                        alcance_sobre_cabeza = cfg["alcance_sobre_cabeza"] or inferidas["alcance_sobre_cabeza"]
-                        teclado_elevado_hombros = cfg["teclado_elevado_hombros"] or inferidas["teclado_elevado_hombros"]
-                        resultado = calcular_ROSA_completo_v5(
-                            ang_tronco=float(np.median(buf["tronco"])),
-                            ang_rodilla=float(np.median(buf["rodilla"])),
-                            ang_codo=float(np.median(buf["codo"])),
-                            desv_cuello=float(np.median(buf["cuello"])),
-                            ang_muneca=float(np.median(buf["muneca"])),
-                            horas_silla=cfg["horas_silla"],
-                            horas_telefono=cfg["horas_telefono"],
-                            horas_pantalla=cfg["horas_pantalla"],
-                            horas_raton=cfg["horas_raton"],
-                            horas_teclado=cfg["horas_teclado"],
-                            pie_llega_suelo=cfg["pie_llega_suelo"],
-                            altura_regulable=cfg["altura_regulable"],
-                            espacio_insuficiente_piernas=cfg["espacio_insuficiente_piernas"],
-                            dist_rodilla_cm=cfg["dist_rodilla_cm"],
-                            profundidad_regulable=cfg["profundidad_regulable"],
-                            tiene_reposabrazos=cfg["tiene_reposabrazos"],
-                            reposabrazos_ajustable=cfg["reposabrazos_ajustable"],
-                            bordes_afilados=cfg["bordes_afilados"],
-                            brazos_anchos=cfg["brazos_anchos"],
-                            reposabrazos_no_regulables=cfg["reposabrazos_no_regulables"],
-                            reposabrazos_altos_bajos=reposabrazos_altos_bajos,
-                            usa_respaldo=cfg["usa_respaldo"],
-                            apoyo_lumbar_adecuado=cfg["apoyo_lumbar_adecuado"],
-                            hombros_encogidos_silla=hombros_encogidos_silla,
-                            respaldo_no_regulable=cfg["respaldo_no_regulable"],
-                            telefono_alejado=cfg["telefono_alejado"],
-                            sujecion_hombro_cuello=cfg["sujecion_hombro_cuello"],
-                            sin_manos_libres=cfg["sin_manos_libres"],
-                            pantalla_dist_ok=pantalla_dist_ok,
-                            pantalla_baja=pantalla_baja,
-                            pantalla_elevada=pantalla_elevada,
-                            dist_pantalla_mayor_75=cfg["dist_pantalla_mayor_75"],
-                            giro_otra_pantalla=cfg["giro_otra_pantalla"],
-                            sin_portadocumentos=cfg["sin_portadocumentos"],
-                            pantalla_reflejos=cfg["pantalla_reflejos"],
-                            raton_alineado=cfg["raton_alineado"],
-                            agarre_pinza=cfg["agarre_pinza"],
-                            raton_teclado_dif_altura=cfg["raton_teclado_dif_altura"],
-                            reposamanos_duro=cfg["reposamanos_duro"],
-                            desviacion_escribir=cfg["desviacion_escribir"],
-                            alcance_sobre_cabeza=alcance_sobre_cabeza,
-                            teclado_elevado_hombros=teclado_elevado_hombros,
-                            sin_soporte_teclado=cfg["sin_soporte_teclado"],
-                        )
+                        cfg_bool = lambda key, default=False: bool(cfg.get(key, default))
+                        cfg_num = lambda key, default=0.0: float(cfg.get(key, default))
+                        try:
+                            inferidas, motivos_inferidos = _inferir_flags_ergonomicos(
+                                lms,
+                                w,
+                                h,
+                                self._ultimas_detecciones_obj,
+                                (
+                                    float(np.median(buf["tronco"])),
+                                    float(np.median(buf["rodilla"])),
+                                    float(np.median(buf["codo"])),
+                                    float(np.median(buf["cuello"])),
+                                    float(np.median(buf["muneca"])),
+                                ),
+                            )
+                            inferencia_mouse = _inferir_mouse_desde_pose_objetos(
+                                lms,
+                                w,
+                                h,
+                                self._ultimas_detecciones_obj,
+                            )
+                            pantalla_elevada = cfg_bool("pantalla_elevada") or inferidas["pantalla_elevada"]
+                            pantalla_baja = cfg_bool("pantalla_baja") or inferidas["pantalla_baja"]
+                            pantalla_dist_ok = (
+                                (cfg_bool("pantalla_dist_ok", True) or inferidas["pantalla_dist_ok"])
+                                and not pantalla_elevada
+                                and not pantalla_baja
+                            )
+                            hombros_encogidos_silla = cfg_bool("hombros_encogidos_silla") or inferidas["hombros_encogidos_silla"]
+                            reposabrazos_altos_bajos = cfg_bool("reposabrazos_altos_bajos") or inferidas["reposabrazos_altos_bajos"]
+                            alcance_sobre_cabeza = cfg_bool("alcance_sobre_cabeza") or inferidas["alcance_sobre_cabeza"]
+                            teclado_elevado_hombros = cfg_bool("teclado_elevado_hombros") or inferidas["teclado_elevado_hombros"]
+                            raton_alineado = cfg_bool("raton_alineado", True)
+                            if inferencia_mouse["raton_alineado_inferido"] is not None:
+                                raton_alineado = inferencia_mouse["raton_alineado_inferido"]
+                            resultado = calcular_ROSA_completo_v5(
+                                ang_tronco=float(np.median(buf["tronco"])),
+                                ang_rodilla=float(np.median(buf["rodilla"])),
+                                ang_codo=float(np.median(buf["codo"])),
+                                desv_cuello=float(np.median(buf["cuello"])),
+                                ang_muneca=float(np.median(buf["muneca"])),
+                                horas_silla=cfg_num("horas_silla"),
+                                horas_telefono=cfg_num("horas_telefono"),
+                                horas_pantalla=cfg_num("horas_pantalla"),
+                                horas_raton=cfg_num("horas_raton"),
+                                horas_teclado=cfg_num("horas_teclado"),
+                                pie_llega_suelo=cfg_bool("pie_llega_suelo", True),
+                                altura_regulable=cfg_bool("altura_regulable", True),
+                                espacio_insuficiente_piernas=cfg_bool("espacio_insuficiente_piernas"),
+                                dist_rodilla_cm=cfg_num("dist_rodilla_cm", 8.0),
+                                profundidad_regulable=cfg_bool("profundidad_regulable", True),
+                                tiene_reposabrazos=cfg_bool("tiene_reposabrazos", True),
+                                reposabrazos_ajustable=cfg_bool("reposabrazos_ajustable", True),
+                                bordes_afilados=cfg_bool("bordes_afilados"),
+                                brazos_anchos=cfg_bool("brazos_anchos"),
+                                reposabrazos_no_regulables=cfg_bool("reposabrazos_no_regulables"),
+                                reposabrazos_altos_bajos=reposabrazos_altos_bajos,
+                                usa_respaldo=cfg_bool("usa_respaldo", True),
+                                apoyo_lumbar_adecuado=cfg_bool("apoyo_lumbar_adecuado", True),
+                                hombros_encogidos_silla=hombros_encogidos_silla,
+                                respaldo_no_regulable=cfg_bool("respaldo_no_regulable"),
+                                telefono_alejado=cfg_bool("telefono_alejado"),
+                                sujecion_hombro_cuello=cfg_bool("sujecion_hombro_cuello"),
+                                sin_manos_libres=cfg_bool("sin_manos_libres"),
+                                pantalla_dist_ok=pantalla_dist_ok,
+                                pantalla_baja=pantalla_baja,
+                                pantalla_elevada=pantalla_elevada,
+                                dist_pantalla_mayor_75=cfg_bool("dist_pantalla_mayor_75"),
+                                giro_otra_pantalla=cfg_bool("giro_otra_pantalla"),
+                                sin_portadocumentos=cfg_bool("sin_portadocumentos"),
+                                pantalla_reflejos=cfg_bool("pantalla_reflejos"),
+                                raton_alineado=raton_alineado,
+                                agarre_pinza=cfg_bool("agarre_pinza"),
+                                raton_teclado_dif_altura=cfg_bool("raton_teclado_dif_altura"),
+                                reposamanos_duro=cfg_bool("reposamanos_duro"),
+                                desviacion_escribir=cfg_bool("desviacion_escribir"),
+                                alcance_sobre_cabeza=alcance_sobre_cabeza,
+                                teclado_elevado_hombros=teclado_elevado_hombros,
+                                sin_soporte_teclado=cfg_bool("sin_soporte_teclado"),
+                            )
+                        except Exception as e:
+                            self.cola_datos.put({"error": f"Error calculando ROSA:\n{e}"})
+                            break
                         obj_pantalla = self._buf_objetos["pantalla"] > 0
                         obj_teclado = self._buf_objetos["teclado"] > 0
                         obj_mouse = self._buf_objetos["mouse"] > 0
@@ -611,6 +811,9 @@ class HiloCamara(threading.Thread):
                         resultado["obj_pantalla"] = obj_pantalla
                         resultado["obj_teclado"] = obj_teclado
                         resultado["obj_mouse"] = obj_mouse
+                        resultado["mano_sobre_mouse"] = inferencia_mouse["mano_sobre_mouse"]
+                        resultado["raton_alineado_eval"] = raton_alineado
+                        resultado["lado_mouse"] = inferencia_mouse["lado_mouse"]
                         resultado["contexto_completo"] = contexto_completo
                         resultado["contexto_objetos"] = (
                             f"pantalla={'si' if obj_pantalla else 'no'}, "
@@ -626,6 +829,11 @@ class HiloCamara(threading.Thread):
                         self._buf_objetos = {"pantalla": 0, "teclado": 0, "mouse": 0, "muestras": 0}
                     last_eval = time.time()
         finally:
+            lector = self._lector_frames
+            if lector is not None:
+                lector.stop()
+                lector.join(timeout=0.5)
+            self._lector_frames = None
             self._cap = None
             try:
                 cap.release()
