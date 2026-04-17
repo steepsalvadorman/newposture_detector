@@ -1,0 +1,1 @@
+sudo docker run --rm -v "$(pwd):/src/" -w /src tobix/pywine:3.10 sh -c "wine python -m pip install numpy==1.23.5 pyinstaller==5.13.2 -r requirements.txt && wine pyinstaller EvaluadorROSA.spec --clean"

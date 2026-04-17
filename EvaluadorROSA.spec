@@ -1,15 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
-
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
+hiddenimports = []
+hiddenimports += collect_submodules('mediapipe')
 
-datas = collect_data_files('mediapipe.tasks.c')
-datas += [('efficientdet_lite0.tflite', '.')]
-datas += [('assets', 'assets')]
+datas = [('efficientdet_lite0.tflite', '.'), ('assets', 'assets')]
+datas += collect_data_files('mediapipe')
 
-hiddenimports = collect_submodules('mediapipe.tasks')
-hiddenimports += ['mediapipe.tasks.c']
-
+block_cipher = None
 
 a = Analysis(
     ['main.py'],
@@ -21,15 +19,18 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
     noarchive=False,
-    optimize=0,
 )
-pyz = PYZ(a.pure)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
+    a.zipfiles,
     a.datas,
     [],
     name='EvaluadorROSA',

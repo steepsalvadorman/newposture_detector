@@ -38,6 +38,12 @@ _POSE_LM = {
     "RIGHT_ELBOW": 14,
     "LEFT_WRIST": 15,
     "RIGHT_WRIST": 16,
+    "LEFT_PINKY": 17,
+    "RIGHT_PINKY": 18,
+    "LEFT_INDEX": 19,
+    "RIGHT_INDEX": 20,
+    "LEFT_THUMB": 21,
+    "RIGHT_THUMB": 22,
     "LEFT_HIP": 23,
     "RIGHT_HIP": 24,
 }
@@ -265,13 +271,16 @@ def _centro_bbox(bbox):
 
 def _lado_visible_brazo(lms, w, h):
     candidatos = []
-    for nombre, shoulder_idx, elbow_idx, wrist_idx in (
-        ("izquierdo", _POSE_LM["LEFT_SHOULDER"], _POSE_LM["LEFT_ELBOW"], _POSE_LM["LEFT_WRIST"]),
-        ("derecho", _POSE_LM["RIGHT_SHOULDER"], _POSE_LM["RIGHT_ELBOW"], _POSE_LM["RIGHT_WRIST"]),
+    for nombre, shoulder_idx, elbow_idx, wrist_idx, index_idx, pinky_idx, thumb_idx in (
+        ("izquierdo", _POSE_LM["LEFT_SHOULDER"], _POSE_LM["LEFT_ELBOW"], _POSE_LM["LEFT_WRIST"], _POSE_LM["LEFT_INDEX"], _POSE_LM["LEFT_PINKY"], _POSE_LM["LEFT_THUMB"]),
+        ("derecho", _POSE_LM["RIGHT_SHOULDER"], _POSE_LM["RIGHT_ELBOW"], _POSE_LM["RIGHT_WRIST"], _POSE_LM["RIGHT_INDEX"], _POSE_LM["RIGHT_PINKY"], _POSE_LM["RIGHT_THUMB"]),
     ):
         shoulder = _pt(lms, shoulder_idx, w, h)
         elbow = _pt(lms, elbow_idx, w, h)
         wrist = _pt(lms, wrist_idx, w, h)
+        index = _pt(lms, index_idx, w, h)
+        pinky = _pt(lms, pinky_idx, w, h)
+        thumb = _pt(lms, thumb_idx, w, h)
         if shoulder is None or elbow is None or wrist is None:
             continue
         score = float(np.mean([
@@ -279,17 +288,20 @@ def _lado_visible_brazo(lms, w, h):
             _landmark_score(lms, elbow_idx),
             _landmark_score(lms, wrist_idx),
         ]))
-        candidatos.append((score, nombre, shoulder, elbow, wrist))
+        candidatos.append((score, nombre, shoulder, elbow, wrist, index, pinky, thumb))
 
     if not candidatos:
         return None
 
-    _, nombre, shoulder, elbow, wrist = max(candidatos, key=lambda item: item[0])
+    _, nombre, shoulder, elbow, wrist, index, pinky, thumb = max(candidatos, key=lambda item: item[0])
     return {
         "nombre": nombre,
         "shoulder": shoulder,
         "elbow": elbow,
         "wrist": wrist,
+        "index": index,
+        "pinky": pinky,
+        "thumb": thumb,
     }
 
 
@@ -327,6 +339,9 @@ def _inferir_mouse_desde_pose_objetos(lms, w, h, detecciones):
                 "shoulder": _pt(lms, _POSE_LM[f"{idx}_SHOULDER"], w, h),
                 "elbow": _pt(lms, _POSE_LM[f"{idx}_ELBOW"], w, h),
                 "wrist": _pt(lms, _POSE_LM[f"{idx}_WRIST"], w, h),
+                "index": _pt(lms, _POSE_LM[f"{idx}_INDEX"], w, h),
+                "pinky": _pt(lms, _POSE_LM[f"{idx}_PINKY"], w, h),
+                "thumb": _pt(lms, _POSE_LM[f"{idx}_THUMB"], w, h),
             }
     if lado is None:
         lado = _lado_visible_brazo(lms, w, h)
@@ -336,16 +351,30 @@ def _inferir_mouse_desde_pose_objetos(lms, w, h, detecciones):
     shoulder = lado["shoulder"]
     elbow = lado["elbow"]
     wrist = lado["wrist"]
+    index = lado.get("index")
+    pinky = lado.get("pinky")
+    thumb = lado.get("thumb")
+    
     if shoulder is None or elbow is None or wrist is None:
         return resultado
 
     mouse_center = _centro_bbox(bbox_mouse)
-    mouse_contact = _punto_caja_mas_cercano(wrist, bbox_mouse)
-    dist_wrist_mouse = float(np.linalg.norm(wrist - mouse_contact))
+    
+    puntos_mano = [pt for pt in (wrist, index, pinky, thumb) if pt is not None]
+    if not puntos_mano:
+        return resultado
+
+    dist_min = float('inf')
+    for pt in puntos_mano:
+        contacto = _punto_caja_mas_cercano(pt, bbox_mouse)
+        dist = float(np.linalg.norm(pt - contacto))
+        if dist < dist_min:
+            dist_min = dist
+
     brazo_ref = max(float(np.linalg.norm(shoulder - wrist)), 1.0)
     torso_ref = max(float(np.linalg.norm(hip_mid - sh_mid)), 1.0) if hip_mid is not None and sh_mid is not None else float(h)
-    tolerancia_contacto = max(0.18 * brazo_ref, 0.05 * torso_ref, 0.035 * w)
-    mano_sobre_mouse = dist_wrist_mouse <= tolerancia_contacto
+    tolerancia_contacto = max(0.22 * brazo_ref, 0.05 * torso_ref, 0.035 * w)
+    mano_sobre_mouse = dist_min <= tolerancia_contacto
 
     resultado["mano_sobre_mouse"] = mano_sobre_mouse
     resultado["lado_mouse"] = lado["nombre"]
