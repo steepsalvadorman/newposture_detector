@@ -1,4 +1,5 @@
 import os
+import platform
 import queue
 import threading
 import time
@@ -47,6 +48,8 @@ _POSE_LM = {
     "LEFT_HIP": 23,
     "RIGHT_HIP": 24,
 }
+
+_CAM_BACKEND = cv2.CAP_DSHOW if platform.system() == "Windows" else cv2.CAP_V4L2
 
 
 def _set_cap_prop_if_available(cap, prop_name, value):
@@ -617,7 +620,7 @@ class HiloCamara(threading.Thread):
             except Exception as e:
                 print(f"[hilo] object detector error: {e}")
 
-        cap = cv2.VideoCapture(self.cam_idx, cv2.CAP_DSHOW)
+        cap = cv2.VideoCapture(self.cam_idx, _CAM_BACKEND)
         _set_cap_prop_if_available(cap, "CAP_PROP_OPEN_TIMEOUT_MSEC", 1200)
         _set_cap_prop_if_available(cap, "CAP_PROP_READ_TIMEOUT_MSEC", 1200)
         if not cap.isOpened():

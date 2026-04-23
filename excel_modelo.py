@@ -94,6 +94,9 @@ UI_LABELS = {
     "alcance_sobre_cabeza": "Alcanza objetos por encima de la cabeza",
     "teclado_elevado_hombros": "Teclado elevado con hombros encogidos",
     "sin_soporte_teclado": "Teclado sin soporte ajustable",
+    "telefono_alejado": "Telefono alejado del cuerpo (>30 cm) [base = 2]",
+    "sujecion_hombro_cuello": "Sujecion del telefono con hombro/cuello [+2]",
+    "sin_manos_libres": "No existe opcion de manos libres [+1]",
 }
 
 

@@ -1,4 +1,5 @@
 import os
+import platform
 import threading
 import time
 import tkinter as tk
@@ -9,11 +10,13 @@ import cv2
 from excel_modelo import descargar_modelo
 from tablas_calculos import C, MAX_CAMARAS_SCAN
 
+_CAM_BACKEND = cv2.CAP_DSHOW if platform.system() == "Windows" else cv2.CAP_V4L2
+
 
 def detectar_camaras():
     camaras = []
     for i in range(MAX_CAMARAS_SCAN):
-        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+        cap = cv2.VideoCapture(i, _CAM_BACKEND)
         try:
             prop = getattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC", None)
             if prop is not None:
@@ -27,6 +30,9 @@ def detectar_camaras():
                 cap.release()
             except Exception:
                 pass
+    # Dar tiempo al SO para liberar completamente los dispositivos
+    if camaras:
+        time.sleep(0.3)
     return camaras if camaras else [(0, "Default")]
 
 
@@ -115,11 +121,7 @@ class DialogoInicio(tk.Tk):
             "Reposabrazos ajustable al codo",
             self._bv("reposabrazos_ajustable", True),
         )
-        self._check(
-            body,
-            "Reposabrazos altos o bajos (codos sin apoyar / hombros encogidos)",
-            self._bv("reposabrazos_altos_bajos"),
-        )
+
         self._check(body, "Reposabrazos con bordes duros", self._bv("bordes_afilados"))
         self._check(body, "Reposabrazos demasiado anchos", self._bv("brazos_anchos"))
         self._check(
@@ -133,11 +135,7 @@ class DialogoInicio(tk.Tk):
             "Apoyo lumbar adecuado",
             self._bv("apoyo_lumbar_adecuado", True),
         )
-        self._check(
-            body,
-            "Hombros encogidos por mesa o silla",
-            self._bv("hombros_encogidos_silla"),
-        )
+
         self._check(
             body,
             "Respaldo no regulable",
@@ -145,25 +143,27 @@ class DialogoInicio(tk.Tk):
         )
 
         self._seccion(body, "Pantalla")
-        self._check(
-            body,
-            "Pantalla entre 40 y 75 cm y a la altura de los ojos",
-            self._bv("pantalla_dist_ok", True),
-        )
-        self._check(
-            body,
-            "Pantalla baja, por debajo de 30° desde la linea de vision",
-            self._bv("pantalla_baja"),
-        )
-        self._check(
-            body,
-            "Pantalla elevada y obliga a extender el cuello",
-            self._bv("pantalla_elevada"),
-        )
         self._check(body, "Pantalla a mas de 75 cm", self._bv("dist_pantalla_mayor_75"))
         self._check(body, "Gira el cuello para ver otra pantalla", self._bv("giro_otra_pantalla"))
         self._check(body, "No usa portadocumentos", self._bv("sin_portadocumentos"))
         self._check(body, "Pantalla con reflejos", self._bv("pantalla_reflejos"))
+
+        self._seccion(body, "Telefono")
+        self._check(
+            body,
+            "Telefono alejado del cuerpo (>30 cm) [base = 2]",
+            self._bv("telefono_alejado"),
+        )
+        self._check(
+            body,
+            "Sujecion del telefono con hombro/cuello [+2]",
+            self._bv("sujecion_hombro_cuello"),
+        )
+        self._check(
+            body,
+            "No existe opcion de manos libres [+1]",
+            self._bv("sin_manos_libres"),
+        )
 
         self._seccion(body, "Mouse")
         self._check(
@@ -189,16 +189,7 @@ class DialogoInicio(tk.Tk):
             "Desviación al escribir",
             self._bv("desviacion_escribir"),
         )
-        self._check(
-            body,
-            "Alcanza objetos por encima de la cabeza",
-            self._bv("alcance_sobre_cabeza"),
-        )
-        self._check(
-            body,
-            "Teclado elevado con hombros encogidos",
-            self._bv("teclado_elevado_hombros"),
-        )
+
         self._check(
             body,
             "Teclado sin soporte ajustable",
@@ -418,6 +409,7 @@ class DialogoInicio(tk.Tk):
         cfg["horas_pantalla"] = horas
         cfg["horas_raton"] = horas
         cfg["horas_teclado"] = horas
+        cfg["horas_telefono"] = 1
         cfg["nombre_proyecto"] = proyecto
         cfg["evaluador"] = evaluador
         cfg["empresa"] = empresa

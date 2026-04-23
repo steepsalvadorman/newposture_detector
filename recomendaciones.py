@@ -1,8 +1,8 @@
 def cfg_efectiva(cfg_base, flags_inferidos):
     cfg = dict(cfg_base or {})
     for key, value in (flags_inferidos or {}).items():
-        if isinstance(value, bool) and key in cfg:
-            cfg[key] = cfg[key] or value
+        if isinstance(value, bool):
+            cfg[key] = cfg.get(key, False) or value
     return cfg
 
 

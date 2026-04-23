@@ -78,7 +78,14 @@ def motivo_a4(dato, cfg):
 
 
 def motivo_b1(dato, cfg):
-    return "B1 fijo en 1 por configuración automática"
+    motivos = []
+    if cfg.get("telefono_alejado"):
+        motivos.append("teléfono alejado >30 cm")
+    if cfg.get("sujecion_hombro_cuello"):
+        motivos.append("sujeción con hombro/cuello")
+    if cfg.get("sin_manos_libres"):
+        motivos.append("sin manos libres")
+    return ", ".join(motivos) if motivos else "teléfono en postura neutra"
 
 
 def motivo_b2(dato, cfg):
@@ -517,6 +524,7 @@ class PanelROSA(tk.Tk):
         )
         self.lbl_desglose.pack(fill="x", padx=12, pady=12)
 
+
         self._card_header(right_content, "Sesion")
         session_card = self._card(right_content)
         self.lbl_sesion = tk.Label(
@@ -551,6 +559,7 @@ class PanelROSA(tk.Tk):
             cursor="hand2",
             command=self._guardar_xlsx_manual,
         ).pack(fill="x", pady=(12, 0), ipady=7)
+
 
     def _card_header(self, parent, text):
         tk.Label(
