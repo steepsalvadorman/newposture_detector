@@ -61,14 +61,6 @@ class DialogoInicio(tk.Tk):
             bg=C["bg_deep"],
             fg=C["accent"],
         ).pack(anchor="w")
-        tk.Label(
-            header,
-            text="Solo se muestran los datos que cambian el puntaje ROSA.",
-            font=("Consolas", 9),
-            bg=C["bg_deep"],
-            fg=C["text_lo"],
-        ).pack(anchor="w", pady=(2, 0))
-
         self.lbl_modelo = tk.Label(
             self,
             text="Verificando modelo...",
@@ -106,7 +98,8 @@ class DialogoInicio(tk.Tk):
         self._campo_horas(body)
         self._campo_camara(body)
 
-        self._seccion(body, "Consideraciones de la evaluacion ergonomica: Silla")
+        self._seccion(body, "Consideraciones de la evaluacion ergonomica")
+        self._seccion(body, "Silla")
         self._check(body, "El pie llega al suelo", self._bv("pie_llega_suelo", True))
         self._check(body, "Altura de la silla regulable", self._bv("altura_regulable", True))
         self._check(body, "Espacio insuficiente para las piernas", self._bv("espacio_insuficiente_piernas"))
@@ -151,7 +144,7 @@ class DialogoInicio(tk.Tk):
             self._bv("respaldo_no_regulable"),
         )
 
-        self._seccion(body, "Consideraciones de la evaluacion ergonomica: Pantalla")
+        self._seccion(body, "Pantalla")
         self._check(
             body,
             "Pantalla entre 40 y 75 cm y a la altura de los ojos",
@@ -172,7 +165,7 @@ class DialogoInicio(tk.Tk):
         self._check(body, "No usa portadocumentos", self._bv("sin_portadocumentos"))
         self._check(body, "Pantalla con reflejos", self._bv("pantalla_reflejos"))
 
-        self._seccion(body, "Consideraciones de la evaluacion ergonomica: Mouse")
+        self._seccion(body, "Mouse")
         self._check(
             body,
             "Mouse alineado con el hombro y dentro del alcance",
@@ -190,7 +183,7 @@ class DialogoInicio(tk.Tk):
             self._bv("reposamanos_duro"),
         )
 
-        self._seccion(body, "Consideraciones de la evaluacion ergonomica: Teclado")
+        self._seccion(body, "Teclado")
         self._check(
             body,
             "Desviación al escribir",
