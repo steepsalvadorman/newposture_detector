@@ -1,8 +1,8 @@
 import sys
 
-from gui_inicio import DialogoInicio
-from gui_principal import PanelROSA
-from tablas_calculos import MODEL_PATH
+from rosa.gui.inicio import DialogoInicio
+from rosa.gui.principal import PanelROSA
+from rosa.core.calculos import MODEL_PATH
 
 
 if __name__ == "__main__":

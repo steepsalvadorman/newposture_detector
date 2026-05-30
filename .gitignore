@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+Env/
+
+# PyInstaller builds
+build/
+build_*/
+dist/
+*.spec.bak
+
+# Models (downloaded at runtime)
+pose_landmarker_lite.task
+
+# Excel output (generated at runtime)
+ROSA_*.xlsx
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Windows
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# macOS / Linux
+.DS_Store
+
+# Logs / temp
+*.log
+*.tmp
+page_*.txt
+wine_run.bash

@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 hiddenimports = []
 hiddenimports += collect_submodules('mediapipe')
 
-datas = [('efficientdet_lite0.tflite', '.'), ('assets', 'assets')]
+datas = [('models/efficientdet_lite0.tflite', '.'), ('assets', 'assets')]
 datas += collect_data_files('mediapipe')
 
 block_cipher = None
