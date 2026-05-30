@@ -99,62 +99,120 @@ class _LectorFramesCamara(threading.Thread):
                 break
 
 
-def _dibujar_pose_y_overlay(frame, lms, angulos):
+def _dibujar_pose_y_overlay(frame, lms, angulos, en_perfil=None):
     h, w, _ = frame.shape
-    conexiones = [
-        (11,12),(11,13),(13,15),(12,14),(14,16),
-        (11,23),(12,24),(23,24),
-        (23,25),(25,27),(24,26),(26,28),
-        (0,11),(0,12),
-    ]
 
-    for lm in lms:
-        cx, cy = int(lm.x * w), int(lm.y * h)
-        cv2.circle(frame, (cx, cy), 4, (0, 200, 255), -1)
-    for i, j in conexiones:
-        if i < len(lms) and j < len(lms):
-            p1 = (int(lms[i].x * w), int(lms[i].y * h))
-            p2 = (int(lms[j].x * w), int(lms[j].y * h))
-            cv2.line(frame, p1, p2, (255, 255, 0), 2)
+    def _pt2d(idx):
+        if idx >= len(lms):
+            return None, 0.0
+        lm = lms[idx]
+        vis = float(min(getattr(lm, "visibility", 1.0), getattr(lm, "presence", 1.0)))
+        return (int(lm.x * w), int(lm.y * h)), vis
+
+    def _sombra(c):
+        return (int(c[0] * 0.22), int(c[1] * 0.22), int(c[2] * 0.22))
+
+    C_OK   = (60, 218, 82)    # verde  – postura correcta
+    C_BAD  = (40, 42, 230)    # rojo   – fuera de rango
+    C_NEUT = (115, 120, 140)  # gris   – sin datos de ángulo
+    VIS_MIN = 0.30
 
     if angulos:
         at, ar, ac, dc, am = angulos
+        c_cuello  = C_OK if abs(dc)       <= 10.0        else C_BAD
+        c_tronco  = C_OK if 5.0 < at      < 20.0         else C_BAD
+        c_codo    = C_OK if 80.0 <= ac    <= 100.0        else C_BAD
+        c_rodilla = C_OK if 85.0 <= ar    <= 95.0         else C_BAD
+        c_muneca  = C_OK if abs(am)       <= 15.0         else C_BAD
+    else:
+        c_cuello = c_tronco = c_codo = c_rodilla = c_muneca = C_NEUT
 
-        def color_ang(condicion_ok):
-            return (0, 214, 143) if condicion_ok else (60, 80, 255)
+    # (idx_a, idx_b, color_del_segmento)
+    huesos = [
+        (0,  11, c_cuello), (0,  12, c_cuello),
+        (11, 12, c_tronco),
+        (11, 23, c_tronco), (12, 24, c_tronco), (23, 24, c_tronco),
+        (11, 13, c_codo),   (13, 15, c_muneca),
+        (12, 14, c_codo),   (14, 16, c_muneca),
+        (23, 25, c_rodilla), (25, 27, c_rodilla),
+        (24, 26, c_rodilla), (26, 28, c_rodilla),
+    ]
 
-        overlay_data = [
-            (f"Tronco:  {at:+.1f}°", color_ang(5.0 < at < 20.0), 20),
-            (f"Rodilla: {ar:.1f}°", color_ang(int(round(ar)) == 90), 38),
-            (f"Codo:    {ac:.1f}°", color_ang(80.0 <= ac <= 100.0), 56),
-            (f"Cuello:  {dc:+.1f}°", color_ang(abs(dc) <= 10.0), 74),
-            (f"Muneca:  {am:+.1f}°", color_ang(abs(am) <= 15.0), 92),
+    jcolor = {
+        0:  c_cuello,
+        11: c_tronco,  12: c_tronco,
+        13: c_codo,    14: c_codo,
+        15: c_muneca,  16: c_muneca,
+        23: c_tronco,  24: c_tronco,
+        25: c_rodilla, 26: c_rodilla,
+        27: c_rodilla, 28: c_rodilla,
+    }
+    jsize = {0: 8, 11: 8, 12: 8}  # cabeza y hombros más grandes
+
+    # ── 1) Huesos: sombra gruesa + trazo principal fino ─────────
+    for a, b, col in huesos:
+        pa, va = _pt2d(a)
+        pb, vb = _pt2d(b)
+        if pa is None or pb is None or va < VIS_MIN or vb < VIS_MIN:
+            continue
+        cv2.line(frame, pa, pb, _sombra(col), 8, cv2.LINE_AA)
+        cv2.line(frame, pa, pb, col,          3, cv2.LINE_AA)
+
+    # ── 2) Articulaciones: anillo oscuro + relleno color ────────
+    for idx, col in jcolor.items():
+        pt, vis = _pt2d(idx)
+        if pt is None or vis < VIS_MIN:
+            continue
+        r = jsize.get(idx, 6)
+        cv2.circle(frame, pt, r + 3, (10, 10, 10), -1, cv2.LINE_AA)
+        cv2.circle(frame, pt, r,     col,           -1, cv2.LINE_AA)
+
+    # ── 3) Overlay de ángulos ───────────────────────────────────
+    if angulos:
+        at, ar, ac, dc, am = angulos
+        filas = [
+            ("Tronco ", f"{at:+.1f}", C_OK if 5.0 < at < 20.0       else C_BAD),
+            ("Rodilla", f"{ar:.1f}",  C_OK if 85.0 <= ar <= 95.0     else C_BAD),
+            ("Codo   ", f"{ac:.1f}",  C_OK if 80.0 <= ac <= 100.0    else C_BAD),
+            ("Cuello ", f"{dc:+.1f}", C_OK if abs(dc) <= 10.0        else C_BAD),
+            ("Muneca ", f"{am:+.1f}", C_OK if abs(am) <= 15.0        else C_BAD),
         ]
-        cv2.rectangle(frame, (w - 200, 8), (w - 4, 102), (10, 12, 16), -1)
-        cv2.rectangle(frame, (w - 200, 8), (w - 4, 102), (37, 42, 52), 1)
-        for texto, color, y in overlay_data:
-            cv2.putText(
-                frame,
-                texto,
-                (w - 196, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.42,
-                color,
-                1,
-                cv2.LINE_AA,
-            )
+        bx  = max(4, w - 216)
+        by  = 6
+        bw_ = 208
+        bh_ = 118
+        cv2.rectangle(frame, (bx, by), (bx + bw_, by + bh_), (8, 10, 14),    -1)
+        cv2.rectangle(frame, (bx, by), (bx + bw_, by + bh_), (40, 46, 58),    1)
+        for k, (label, valor, col) in enumerate(filas):
+            yt = by + 20 + k * 18
+            cv2.putText(frame, label, (bx + 8,   yt),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, (160, 165, 180), 1, cv2.LINE_AA)
+            cv2.putText(frame, valor, (bx + 112, yt),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, col,              1, cv2.LINE_AA)
+        sep_y = by + bh_ - 18
+        leg_y = by + bh_ - 8
+        cv2.line(frame, (bx + 6, sep_y), (bx + bw_ - 6, sep_y), (40, 46, 58), 1)
+        cv2.circle(frame, (bx + 14, leg_y), 4, C_OK,  -1, cv2.LINE_AA)
+        cv2.putText(frame, "OK",     (bx + 22, leg_y + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.32, C_OK,  1, cv2.LINE_AA)
+        cv2.circle(frame, (bx + 72, leg_y), 4, C_BAD, -1, cv2.LINE_AA)
+        cv2.putText(frame, "Riesgo", (bx + 80, leg_y + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.32, C_BAD, 1, cv2.LINE_AA)
 
-    cv2.rectangle(frame, (0, 0), (320, 20), (10, 12, 16), -1)
-    cv2.putText(
-        frame,
-        "ROSA NTP-1173 v5 Monitor",
-        (8, 14),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.5,
-        (0, 200, 255),
-        1,
-        cv2.LINE_AA,
-    )
+    # ── 4) Barra de título + indicador de perfil ────────────────
+    cv2.rectangle(frame, (0, 0), (w, 22), (8, 10, 14), -1)
+    cv2.putText(frame, "ROSA NTP-1173 v5", (8, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.50, (0, 200, 255), 1, cv2.LINE_AA)
+    if en_perfil is not None:
+        if en_perfil:
+            txt_p = "PERFIL"
+            col_p = (60, 218, 82)    # verde
+        else:
+            txt_p = "Gira de perfil"
+            col_p = (0, 165, 255)    # naranja (BGR)
+        (txt_w, _), _ = cv2.getTextSize(txt_p, cv2.FONT_HERSHEY_SIMPLEX, 0.48, 1)
+        cv2.putText(frame, txt_p, (w - txt_w - 8, 15),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.48, col_p, 1, cv2.LINE_AA)
 
 
 def _normalizar_categoria(nombre):
@@ -222,8 +280,27 @@ def _es_postura_perfil(lsh, rsh, sh_mid, hip_mid, w):
     separacion_hombros = abs(lsh[0] - rsh[0])
     if hip_mid is not None:
         ref = max(abs(hip_mid[1] - sh_mid[1]), 1.0)
-        return separacion_hombros <= max(0.12 * w, 0.45 * ref)
-    return separacion_hombros <= 0.12 * w
+        return bool(separacion_hombros <= max(0.12 * w, 0.45 * ref))
+    return bool(separacion_hombros <= 0.12 * w)
+
+
+def _verificar_perfil(lms, w, h):
+    """True si los landmarks indican postura de perfil (evaluación ROSA válida)."""
+    VIS_MIN = 0.30
+
+    def _ptv(idx):
+        if idx >= len(lms):
+            return None
+        lm = lms[idx]
+        if float(min(getattr(lm, "visibility", 1.0), getattr(lm, "presence", 1.0))) < VIS_MIN:
+            return None
+        return np.array([float(lm.x) * w, float(lm.y) * h], dtype=float)
+
+    lsh     = _ptv(_POSE_LM["LEFT_SHOULDER"])
+    rsh     = _ptv(_POSE_LM["RIGHT_SHOULDER"])
+    sh_mid  = _avg_pt(lsh, rsh)
+    hip_mid = _avg_pt(_ptv(_POSE_LM["LEFT_HIP"]), _ptv(_POSE_LM["RIGHT_HIP"]))
+    return bool(_es_postura_perfil(lsh, rsh, sh_mid, hip_mid, w))
 
 
 def _flexion_cabeza_perfil(nose, ear):
@@ -918,6 +995,7 @@ class HiloCamara(threading.Thread):
                     lms = self._ultimo_resultado
 
                 if lms is not None:
+                    en_perfil = _verificar_perfil(lms, w, h)
                     ang = extraer_angulos_v2(lms, w, h)
                     angulos_overlay = None
                     if ang:
@@ -925,11 +1003,12 @@ class HiloCamara(threading.Thread):
                         if suavizados:
                             at, ar, ac, dc, am = suavizados
                             angulos_overlay = suavizados
-                            self._buf["tronco"].append(at)
-                            self._buf["rodilla"].append(ar)
-                            self._buf["codo"].append(ac)
-                            self._buf["cuello"].append(dc)
-                            self._buf["muneca"].append(am)
+                            if en_perfil:
+                                self._buf["tronco"].append(at)
+                                self._buf["rodilla"].append(ar)
+                                self._buf["codo"].append(ac)
+                                self._buf["cuello"].append(dc)
+                                self._buf["muneca"].append(am)
 
                             if self.cola_angulos.full():
                                 try:
@@ -940,7 +1019,7 @@ class HiloCamara(threading.Thread):
                                 "at": at, "ar": ar, "ac": ac,
                                 "dc": dc, "am": am
                             })
-                    _dibujar_pose_y_overlay(frame, lms, angulos_overlay)
+                    _dibujar_pose_y_overlay(frame, lms, angulos_overlay, en_perfil)
                 _dibujar_objetos(frame, self._ultimas_detecciones_obj)
 
                 if self.cola_frames.full():

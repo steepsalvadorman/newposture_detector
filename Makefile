@@ -1,4 +1,4 @@
-.PHONY: install run benchmark build-wine run-wine setup-wine freeze-deps
+.PHONY: install run benchmark test build-wine run-wine setup-wine freeze-deps
 
 PYTHON  = .venv/bin/python
 PIP     = .venv/bin/pip
@@ -14,6 +14,9 @@ run:
 
 benchmark:
 	$(PYTHON) scripts/benchmark.py
+
+test:
+	$(PYTHON) -m pytest tests/ -v
 
 # ── Build Windows (Wine) ───────────────────────────────────
 setup-wine:
