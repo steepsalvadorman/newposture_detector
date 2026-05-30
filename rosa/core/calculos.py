@@ -555,11 +555,11 @@ def extraer_angulos_v2(landmarks, w, h):
                 "ankle": _punto_landmark(landmarks, _LM["RIGHT_ANKLE"], w, h),
             },
         }
-        lado = max(lados.values(), key=lambda item: item["score"])
+        lado_nombre, lado = max(lados.items(), key=lambda kv: kv[1]["score"])
         if any(lado[k] is None for k in ("shoulder", "hip", "elbow", "wrist", "knee", "ankle")):
             return None
 
-        ang_tronco = calcular_desviacion_vertical(lado["shoulder"], lado["hip"])
+        ang_tronco  = calcular_desviacion_vertical(lado["shoulder"], lado["hip"])
         ang_rodilla = calcular_angulo(lado["hip"], lado["knee"], lado["ankle"])
         ang_codo    = calcular_angulo(lado["shoulder"], lado["elbow"], lado["wrist"])
         desv_cuello = calcular_desviacion_vertical(nose, mid_sh)
@@ -568,6 +568,15 @@ def extraer_angulos_v2(landmarks, w, h):
             lado["wrist"],
             [lado["wrist"][0] + 100, lado["wrist"][1]],
         ) - 90
+
+        # Convención ROSA: ang_tronco > 0 = inclinación hacia adelante (5-20° → neutro).
+        # Con el lado derecho visible (persona mirando a la izquierda) el vector
+        # shoulder→hip tiene dx < 0 para la misma inclinación → invertir los tres ángulos
+        # que dependen de la dirección horizontal del perfil.
+        if lado_nombre == "right":
+            ang_tronco  = -ang_tronco
+            desv_cuello = -desv_cuello
+            ang_muneca  = -ang_muneca
 
         if not (-80 <= ang_tronco <= 80):
             return None

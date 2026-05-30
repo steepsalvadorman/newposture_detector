@@ -6,7 +6,7 @@ from rosa.core.calculos import MODEL_PATH
 
 
 if __name__ == "__main__":
-    print("[main] Iniciando Evaluador ROSA NTP-1173 v5.0")
+    print("[main] Iniciando Evaluador ROSA NTP-1173")
     print(f"[main] Modelo: {MODEL_PATH}")
 
     dialogo = DialogoInicio()
