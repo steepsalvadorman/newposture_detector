@@ -19,6 +19,7 @@ if WINSOUND_OK:
 
 
 RETARDO_ALARMA_SEG = 10
+COOLDOWN_ALARMA_SEG = 90
 
 
 def nivel_accion(score):
@@ -198,10 +199,9 @@ def _cargar_icono_categoria(categoria, size=60):
 
 def mostrar_overlay_alarma(parent, recomendaciones, on_close=None):
     overlay = tk.Toplevel(parent)
-    overlay.attributes("-fullscreen", True)
+    overlay.overrideredirect(True)
     overlay.attributes("-topmost", True)
     overlay.configure(bg="#8B0000")
-    overlay.overrideredirect(True)
     overlay.grab_set()
     overlay.focus_force()
     overlay._iconos_alerta = []
@@ -211,6 +211,7 @@ def mostrar_overlay_alarma(parent, recomendaciones, on_close=None):
 
     screen_w = overlay.winfo_screenwidth()
     screen_h = overlay.winfo_screenheight()
+    overlay.geometry(f"{screen_w}x{screen_h}+0+0")
     es_laptop_baja = screen_h <= 800
     es_ultrawide = screen_w >= 2200
 
@@ -379,8 +380,15 @@ class PanelROSA(tk.Tk):
     def __init__(self, nombre, horas_diarias, cam_idx, ruta_xlsx, config_ergonomica):
         super().__init__()
         self.title(f"Proyecto de Titulación - ROSA ERGONOMY - CESAR  | {nombre}")
-        self.geometry("1120x660")
-        self.minsize(1080, 620)
+        self.update_idletasks()
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        win_w = int(sw * 0.88)
+        win_h = int(sh * 0.90)
+        win_x = (sw - win_w) // 2
+        win_y = (sh - win_h) // 2
+        self.geometry(f"{win_w}x{win_h}+{win_x}+{win_y}")
+        self.minsize(800, 520)
         self.configure(bg=C["bg_deep"])
 
         self.cola_datos = queue.Queue()
@@ -404,6 +412,7 @@ class PanelROSA(tk.Tk):
         self.cola_estado_guardado = queue.Queue()
         self._alarma_pendiente = False
         self._alarma_deadline = 0.0
+        self._alarma_dismissed_at = 0.0
         self._ultimo_dato = None
 
         self.metadata = {
@@ -430,13 +439,18 @@ class PanelROSA(tk.Tk):
         self._update_loop()
 
     def _setup_ui(self, nombre, horas_diarias):
+        self.update_idletasks()
+        win_w = self.winfo_width() or int(self.winfo_screenwidth() * 0.88)
+        win_h = self.winfo_height() or int(self.winfo_screenheight() * 0.90)
+        right_w = max(340, int(win_w * 0.37))
+        score_font = max(36, min(58, int(win_h * 0.07)))
+        wrap_w = right_w - 40
+
         left = tk.Frame(self, bg=C["bg_deep"])
         left.pack(side="left", fill="both", expand=True, padx=(16, 8), pady=16)
 
         self.canvas = tk.Canvas(
             left,
-            width=640,
-            height=480,
             bg="black",
             highlightthickness=1,
             highlightbackground=C["bg_border"],
@@ -471,22 +485,45 @@ class PanelROSA(tk.Tk):
         )
         self.lbl_alerta_status.pack(side="right", padx=(0, 8), pady=6)
 
-        right = tk.Frame(self, bg=C["bg_deep"], width=420)
+        right = tk.Frame(self, bg=C["bg_deep"], width=right_w)
         right.pack(side="right", fill="y", padx=(8, 16), pady=16)
         right.pack_propagate(False)
 
-        right_content = tk.Frame(right, bg=C["bg_deep"])
-        right_content.pack(fill="both", expand=True)
-
+        # Footer (save button) goes outside the scrollable area
         right_footer = tk.Frame(right, bg=C["bg_deep"])
         right_footer.pack(fill="x", side="bottom")
+
+        # Scrollable right panel
+        right_scroll_canvas = tk.Canvas(right, bg=C["bg_deep"], highlightthickness=0)
+        right_scrollbar = tk.Scrollbar(right, orient="vertical", command=right_scroll_canvas.yview)
+        right_scroll_canvas.configure(yscrollcommand=right_scrollbar.set)
+        right_scrollbar.pack(side="right", fill="y")
+        right_scroll_canvas.pack(side="left", fill="both", expand=True)
+
+        right_content = tk.Frame(right_scroll_canvas, bg=C["bg_deep"])
+        _right_win = right_scroll_canvas.create_window((0, 0), window=right_content, anchor="nw")
+
+        def _on_right_configure(_event=None):
+            right_scroll_canvas.configure(scrollregion=right_scroll_canvas.bbox("all"))
+            right_scroll_canvas.itemconfigure(_right_win, width=max(right_scroll_canvas.winfo_width(), 1))
+
+        right_content.bind("<Configure>", _on_right_configure)
+        right_scroll_canvas.bind("<Configure>", _on_right_configure)
+
+        def _on_right_mousewheel(event):
+            if right_scroll_canvas.winfo_height() < right_content.winfo_reqheight():
+                delta = -1 if event.delta < 0 else 1
+                right_scroll_canvas.yview_scroll(-delta, "units")
+
+        right_scroll_canvas.bind("<MouseWheel>", _on_right_mousewheel)
+        right_content.bind("<MouseWheel>", _on_right_mousewheel)
 
         self._card_header(right_content, "Resultado")
         score_card = self._card(right_content)
         self.lbl_score = tk.Label(
             score_card,
             text="--",
-            font=("Consolas", 58, "bold"),
+            font=("Consolas", score_font, "bold"),
             bg=C["bg_card"],
             fg=C["accent"],
         )
@@ -510,7 +547,7 @@ class PanelROSA(tk.Tk):
             fg=C["text_hi"],
             justify="left",
             anchor="w",
-            wraplength=370,
+            wraplength=wrap_w,
         )
         self.lbl_resumen.pack(fill="x", padx=12, pady=12)
 
@@ -524,10 +561,9 @@ class PanelROSA(tk.Tk):
             fg=C["text_hi"],
             justify="left",
             anchor="w",
-            wraplength=370,
+            wraplength=wrap_w,
         )
         self.lbl_desglose.pack(fill="x", padx=12, pady=12)
-
 
         self._card_header(right_content, "Sesion")
         session_card = self._card(right_content)
@@ -549,7 +585,7 @@ class PanelROSA(tk.Tk):
             fg=C["text_lo"],
             justify="left",
             anchor="w",
-            wraplength=370,
+            wraplength=wrap_w,
         )
         self.lbl_sesion.pack(fill="x", padx=12, pady=12)
 
@@ -586,9 +622,10 @@ class PanelROSA(tk.Tk):
         return card
 
     def _actualizar_frame(self, frame_rgb):
-        img = Image.fromarray(frame_rgb).resize((640, 480))
+        cw = max(4, self.canvas.winfo_width())
+        ch = max(4, self.canvas.winfo_height())
+        img = Image.fromarray(frame_rgb).resize((cw, ch))
         imgtk = ImageTk.PhotoImage(image=img)
-        self.canvas.config(width=img.width, height=img.height)
         self.canvas.itemconfig(self.img_id, image=imgtk)
         self.canvas.image = imgtk
         self.lbl_estado_camara.config(text="Camara activa")
@@ -793,7 +830,7 @@ class PanelROSA(tk.Tk):
 
     def _programar_alarma(self):
         ahora = time.time()
-        if self._alerta_activa or self._alarma_pendiente or (ahora - self._ultimo_alerta) < 3:
+        if self._alerta_activa or self._alarma_pendiente or (ahora - self._alarma_dismissed_at) < COOLDOWN_ALARMA_SEG:
             return
         self._alarma_pendiente = True
         self._alarma_deadline = ahora + RETARDO_ALARMA_SEG
@@ -812,7 +849,7 @@ class PanelROSA(tk.Tk):
 
     def _alertar(self, dato=None):
         ahora = time.time()
-        if self._alerta_activa or (ahora - self._ultimo_alerta) < 3:
+        if self._alerta_activa or (ahora - self._alarma_dismissed_at) < COOLDOWN_ALARMA_SEG:
             return
 
         self._ultimo_alerta = ahora
@@ -821,6 +858,7 @@ class PanelROSA(tk.Tk):
         def cerrar_alerta(_event=None):
             if not self._alerta_activa:
                 return
+            self._alarma_dismissed_at = time.time()
             self._alerta_activa = False
             self._alerta_overlay = None
             self.lbl_alerta_status.config(text="")

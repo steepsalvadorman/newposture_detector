@@ -40,8 +40,15 @@ class DialogoInicio(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("ROSA Ergonomy Detection")
-        self.geometry("540x720")
-        self.minsize(540, 660)
+        self.update_idletasks()
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        dlg_w = max(480, min(600, int(sw * 0.42)))
+        dlg_h = max(540, min(820, int(sh * 0.90)))
+        dlg_x = (sw - dlg_w) // 2
+        dlg_y = (sh - dlg_h) // 2
+        self.geometry(f"{dlg_w}x{dlg_h}+{dlg_x}+{dlg_y}")
+        self.minsize(480, 540)
         self.configure(bg=C["bg_deep"])
         self.resultado = None
         self._vars = {}
@@ -91,7 +98,7 @@ class DialogoInicio(tk.Tk):
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all")),
         )
-        canvas.bind_all(
+        canvas.bind(
             "<MouseWheel>",
             lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"),
         )
@@ -345,7 +352,7 @@ class DialogoInicio(tk.Tk):
         self.spin_dist.pack(anchor="w", padx=12, pady=(2, 6))
         tk.Label(
             parent,
-            text="Postura neutra: exactamente 8 cm",
+            text="Postura neutra: rango 5-9 cm",
             font=("Consolas", 8),
             bg=C["bg_card"],
             fg=C["text_lo"],

@@ -159,7 +159,7 @@ def puntuar_A1(ang_rodilla, pie_llega_suelo, altura_regulable, espacio_insuficie
     """
     if not pie_llega_suelo:
         base = 3
-    elif int(round(float(ang_rodilla))) == 90:
+    elif 85.0 <= float(ang_rodilla) <= 95.0:
         base = 1
     else:
         base = 2
@@ -180,7 +180,7 @@ def puntuar_A2(dist_rodilla_asiento_cm, profundidad_regulable):
       - Menor o mayor a 8 cm                       → 2
       - +1 si la profundidad NO es regulable
     """
-    base = 1 if int(round(float(dist_rodilla_asiento_cm))) == 8 else 2
+    base = 1 if 5.0 <= float(dist_rodilla_asiento_cm) <= 9.0 else 2
     modificador = 0 if profundidad_regulable else 1
     return int(np.clip(base + modificador, 1, 9))
 

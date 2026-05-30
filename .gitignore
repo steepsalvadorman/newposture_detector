@@ -11,6 +11,12 @@ venv/
 env/
 Env/
 
+# Lock file generado por make freeze-deps
+requirements.lock
+
+# Wine prefix
+.wine_rosa/
+
 # PyInstaller builds
 build/
 build_*/

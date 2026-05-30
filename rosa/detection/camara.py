@@ -51,6 +51,11 @@ _POSE_LM = {
 
 _CAM_BACKEND = cv2.CAP_DSHOW if platform.system() == "Windows" else cv2.CAP_V4L2
 
+# ── Parámetros de rendimiento CPU ─────────────────────────────
+_DETECT_FPS          = 10       # frecuencia máxima de inferencia de pose
+_DETECT_W, _DETECT_H = 320, 240 # resolución de entrada para pose (4× menos píxeles)
+_OBJ_INTERVAL_SEG    = 1.5      # segundos entre ejecuciones del detector de objetos
+
 
 def _set_cap_prop_if_available(cap, prop_name, value):
     prop = getattr(cv2, prop_name, None)
@@ -484,6 +489,93 @@ def _inferir_flags_ergonomicos(lms, w, h, detecciones, angulos):
     return inferidas, motivos
 
 
+def _parsear_detecciones_objetos(obj_result, w, h):
+    """Convierte el resultado crudo del detector en la lista interna + set de presentes."""
+    detecciones = []
+    presentes = set()
+    for det in obj_result.detections:
+        if not det.categories:
+            continue
+        categoria = det.categories[0]
+        label = _normalizar_categoria(categoria.category_name)
+        logical = _objetos_logicos(label)
+        if not logical:
+            continue
+        box = det.bounding_box
+        x1 = max(0, int(box.origin_x))
+        y1 = max(0, int(box.origin_y))
+        x2 = min(w - 1, int(box.origin_x + box.width))
+        y2 = min(h - 1, int(box.origin_y + box.height))
+        if x2 <= x1 or y2 <= y1:
+            continue
+        detecciones.append({
+            "label": label,
+            "logical": logical,
+            "score": float(categoria.score),
+            "bbox": (x1, y1, x2, y2),
+        })
+        presentes.update(logical)
+    return detecciones, presentes
+
+
+class _HiloDeteccionObjetos(threading.Thread):
+    """
+    Hilo daemon que ejecuta el detector de objetos sin bloquear el loop de cámara.
+    El frame más reciente enviado con enviar() es el que se procesa; los frames
+    intermedios se descartan si el detector aún no terminó el anterior.
+    """
+
+    def __init__(self, detector):
+        super().__init__(daemon=True)
+        self._detector = detector
+        self._pending = None          # frame RGB a procesar (el más reciente gana)
+        self._lock = threading.Lock()
+        self._resultado = []          # última lista de detecciones
+        self._presentes_nuevo = set() # presentes del último run
+        self._hay_nuevo = False       # flag: ¿hay resultado sin consumir?
+        self._stop_event = threading.Event()
+
+    def enviar(self, rgb_frame):
+        """Entrega un frame al hilo; descarta el frame anterior si no fue procesado."""
+        with self._lock:
+            self._pending = rgb_frame
+
+    def leer(self):
+        """
+        Devuelve (detecciones, presentes_del_ultimo_run, hay_resultado_nuevo).
+        Resetea el flag hay_nuevo para que cada resultado se contabilice una sola vez.
+        """
+        with self._lock:
+            hay = self._hay_nuevo
+            self._hay_nuevo = False
+            return list(self._resultado), set(self._presentes_nuevo), hay
+
+    def stop(self):
+        self._stop_event.set()
+
+    def run(self):
+        while not self._stop_event.is_set():
+            with self._lock:
+                frame = self._pending
+                self._pending = None
+
+            if frame is None:
+                self._stop_event.wait(0.05)
+                continue
+
+            try:
+                h, w = frame.shape[:2]
+                mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+                result = self._detector.detect(mp_img)
+                dets, presentes = _parsear_detecciones_objetos(result, w, h)
+                with self._lock:
+                    self._resultado = dets
+                    self._presentes_nuevo = presentes
+                    self._hay_nuevo = True
+            except Exception as e:
+                print(f"[obj_detect] error: {e}")
+
+
 class HiloCamara(threading.Thread):
     _ANGLE_LIMITS = {
         "at": (-70.0, 70.0),
@@ -528,10 +620,15 @@ class HiloCamara(threading.Thread):
         self._lector_frames = None
         self._landmarker = None
         self._object_detector = None
+        self._hilo_obj = None
 
     def stop(self):
         self.activo = False
         self._stop_event.set()
+
+        hilo_obj = self._hilo_obj
+        if hilo_obj is not None:
+            hilo_obj.stop()
 
         lector = self._lector_frames
         if lector is not None:
@@ -582,41 +679,6 @@ class HiloCamara(threading.Thread):
 
     def _cfg_num(self, key, default=0.0):
         return float(self.cfg.get(key, default))
-
-    def _detectar_objetos(self, rgb, w, h):
-        try:
-            mp_image_obj = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            obj_result = self._object_detector.detect(mp_image_obj)
-            detecciones = []
-            presentes = set()
-            for det in obj_result.detections:
-                if not det.categories:
-                    continue
-                categoria = det.categories[0]
-                label = _normalizar_categoria(categoria.category_name)
-                logical = _objetos_logicos(label)
-                if not logical:
-                    continue
-                box = det.bounding_box
-                x1 = max(0, int(box.origin_x))
-                y1 = max(0, int(box.origin_y))
-                x2 = min(w - 1, int(box.origin_x + box.width))
-                y2 = min(h - 1, int(box.origin_y + box.height))
-                if x2 <= x1 or y2 <= y1:
-                    continue
-                detecciones.append({
-                    "label": label,
-                    "logical": logical,
-                    "score": float(categoria.score),
-                    "bbox": (x1, y1, x2, y2),
-                })
-                presentes.update(logical)
-            self._ultimas_detecciones_obj = detecciones
-            self._buf_objetos["muestras"] += 1
-            for obj in presentes:
-                self._buf_objetos[obj] += 1
-        except Exception as e:
-            print(f"[hilo] object detect error: {e}")
 
     def _evaluar_periodo(self, lms, w, h):
         buf = self._buf
@@ -741,14 +803,17 @@ class HiloCamara(threading.Thread):
                 with self._lock:
                     self._ultimo_resultado = result.pose_landmarks[0]
 
-        base_opts = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
+        base_opts = mp_python.BaseOptions(
+            model_asset_path=MODEL_PATH,
+            delegate=mp_python.BaseOptions.Delegate.CPU,
+        )
         opts = mp_vision.PoseLandmarkerOptions(
             base_options=base_opts,
             running_mode=mp_vision.RunningMode.LIVE_STREAM,
             num_poses=1,
-            min_pose_detection_confidence=0.5,
-            min_pose_presence_confidence=0.5,
-            min_tracking_confidence=0.5,
+            min_pose_detection_confidence=0.45,
+            min_pose_presence_confidence=0.45,
+            min_tracking_confidence=0.45,
             result_callback=resultado_callback,
         )
 
@@ -760,15 +825,21 @@ class HiloCamara(threading.Thread):
             return
 
         object_detector = None
+        self._hilo_obj = None
         if os.path.exists(OBJECT_MODEL_PATH):
             try:
                 obj_opts = mp_vision.ObjectDetectorOptions(
-                    base_options=mp_python.BaseOptions(model_asset_path=OBJECT_MODEL_PATH),
-                    score_threshold=0.25,
-                    max_results=10,
+                    base_options=mp_python.BaseOptions(
+                        model_asset_path=OBJECT_MODEL_PATH,
+                        delegate=mp_python.BaseOptions.Delegate.CPU,
+                    ),
+                    score_threshold=0.30,  # umbral más alto → menos falsos → más rápido
+                    max_results=6,
                 )
                 object_detector = mp_vision.ObjectDetector.create_from_options(obj_opts)
                 self._object_detector = object_detector
+                self._hilo_obj = _HiloDeteccionObjetos(object_detector)
+                self._hilo_obj.start()
             except Exception as e:
                 print(f"[hilo] object detector error: {e}")
 
@@ -816,11 +887,14 @@ class HiloCamara(threading.Thread):
 
                 frame = cv2.flip(frame, 1)
                 h, w, _ = frame.shape
-
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 now = time.time()
-                if now - last_detect >= (1 / 15):
-                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
+                # ── Pose: inferencia a resolución reducida (CPU) ────────
+                if now - last_detect >= 1.0 / _DETECT_FPS:
+                    small = cv2.resize(frame, (_DETECT_W, _DETECT_H),
+                                       interpolation=cv2.INTER_LINEAR)
+                    rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_small)
                     ts_ms = max(ts_ms + 1, int(now * 1000))
                     try:
                         landmarker.detect_async(mp_image, ts_ms)
@@ -828,9 +902,17 @@ class HiloCamara(threading.Thread):
                     except Exception as e:
                         print(f"[hilo] detect_async error: {e}")
 
-                if self._object_detector is not None and now - last_object_detect >= 0.5:
-                    self._detectar_objetos(rgb, w, h)
-                    last_object_detect = now
+                # ── Objetos: hilo paralelo, no bloquea el loop ──────────
+                if self._hilo_obj is not None:
+                    dets, presentes_nuevo, hay_nuevo = self._hilo_obj.leer()
+                    self._ultimas_detecciones_obj = dets
+                    if hay_nuevo:
+                        self._buf_objetos["muestras"] += 1
+                        for obj in presentes_nuevo:
+                            self._buf_objetos[obj] += 1
+                    if now - last_object_detect >= _OBJ_INTERVAL_SEG:
+                        self._hilo_obj.enviar(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                        last_object_detect = now
 
                 with self._lock:
                     lms = self._ultimo_resultado
@@ -888,6 +970,11 @@ class HiloCamara(threading.Thread):
             except Exception:
                 pass
             self._landmarker = None
+            hilo_obj = self._hilo_obj
+            if hilo_obj is not None:
+                hilo_obj.stop()
+                hilo_obj.join(timeout=1.0)
+            self._hilo_obj = None
             if object_detector is not None:
                 try:
                     object_detector.close()
